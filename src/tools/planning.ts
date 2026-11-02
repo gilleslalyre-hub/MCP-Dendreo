@@ -27,8 +27,7 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
       title: "Staffer un formateur sur une session",
       description:
         "Ajoute un formateur à une action de formation et l'affecte à tous ses créneaux ou à certains jours. " +
-        "Peut remplacer un autre formateur sur ces créneaux (il en est déstaffé). " +
-        "Par défaut dry_run=true : rien n'est écrit. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "Peut remplacer un autre formateur sur ces créneaux (il en est déstaffé).",
       inputSchema: {
         session: z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)"),
         formateur: z.string().optional().describe("Formateur à staffer : prénom et nom, ou id (ou utiliser entreprise_sous_traitante)"),
@@ -123,8 +122,7 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
       description:
         "Modifie le planning d'une action de formation : ajouter des créneaux, modifier la date, les heures ou l'intitulé " +
         "de créneaux existants, décaler des créneaux d'un nombre de jours, ou définir la salle / le lien visio d'un créneau " +
-        "(alerte si la capacité de la salle est inférieure aux inscrits). Un créneau émargé ne peut pas être modifié. " +
-        "Par défaut dry_run=true : rien n'est écrit. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "(alerte si la capacité de la salle est inférieure aux inscrits). Un créneau émargé ne peut pas être modifié.",
       inputSchema: {
         session: z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)"),
         ajouter: z

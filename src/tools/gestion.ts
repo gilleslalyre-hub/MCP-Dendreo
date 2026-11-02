@@ -50,8 +50,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
       description:
         "Modifie une action de formation existante : étape (ex. passer en « Réalisation » ou « Annulée »), intitulé, " +
         "salle, nombre de places, responsable, commentaires, publication au catalogue en ligne, émargement électronique, " +
-        "champs personnalisés. Le type et les dates ne se modifient pas ici (dates : gerer_creneaux). " +
-        "Par défaut dry_run=true : rien n'est écrit. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "champs personnalisés. Le type et les dates ne se modifient pas ici (dates : gerer_creneaux).",
       inputSchema: {
         session: SESSION,
         etape: z.string().optional().describe("Nouvelle étape, ex. « Réalisation »"),
@@ -217,8 +216,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
       title: "Transférer un participant vers une autre session",
       description:
         "Déplace un participant d'une session vers une autre (en général une autre date du même module) : inscription " +
-        "à la nouvelle session puis désinscription de l'ancienne. Refusé si des présences sont déjà saisies sur l'ancienne. " +
-        "Par défaut dry_run=true : rien n'est écrit. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "à la nouvelle session puis désinscription de l'ancienne. Refusé si des présences sont déjà saisies sur l'ancienne.",
       inputSchema: {
         de_session: SESSION,
         vers_session: SESSION,
@@ -360,8 +358,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
       title: "Retirer un formateur d'une session",
       description:
         "Déstaffe un formateur d'une session, sur tous ses créneaux (il est alors retiré de la session) ou sur certains " +
-        "jours. Dendreo refuse si le formateur a émargé ou est facturé, ou si un participant l'a déjà noté. " +
-        "Par défaut dry_run=true : rien n'est écrit. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "jours. Dendreo refuse si le formateur a émargé ou est facturé, ou si un participant l'a déjà noté.",
       inputSchema: {
         session: SESSION,
         formateur: z.string().describe("Prénom et nom, ou id"),
@@ -494,7 +491,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
       if (avertissements.length) {
         const first = result.content[0];
         if (first?.type === "text") {
-          first.text = JSON.stringify({ origine: sessionLabel(adf), avertissements, ...JSON.parse(first.text) }, null, 2);
+          first.text = JSON.stringify({ origine: sessionLabel(adf), avertissements, ...JSON.parse(first.text) });
         }
       }
       return result;

@@ -157,7 +157,7 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
         }
       }
       if (demandes.length > MAX_DOCUMENTS) journal.push(`Seuls les ${MAX_DOCUMENTS} premiers documents sont joints.`);
-      result.content.unshift({ type: "text", text: JSON.stringify({ documents: journal }, null, 2) });
+      result.content.unshift({ type: "text", text: JSON.stringify({ documents: journal }) });
       return result;
     },
   );

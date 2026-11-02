@@ -113,8 +113,7 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
       title: "Saisir des présences ou absences",
       description:
         "Marque des participants présents ou absents (absence justifiée ou non, présence partielle en heures) sur des " +
-        "créneaux d'une action de formation. Un créneau déjà émargé électroniquement est refusé par Dendreo. " +
-        "Par défaut dry_run=true : rien n'est écrit. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "créneaux d'une action de formation. Un créneau déjà émargé électroniquement est refusé par Dendreo.",
       inputSchema: {
         session: SESSION,
         participants: z

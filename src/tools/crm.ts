@@ -122,8 +122,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
       title: "Créer ou mettre à jour une entreprise",
       description:
         "Crée une entreprise dans le CRM, ou met à jour la fiche existante. La fiche existante est retrouvée par " +
-        "`entreprise` (raison sociale, ENT_… ou id) ou par SIRET, pour éviter les doublons. " +
-        "Par défaut dry_run=true : rien n'est écrit. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "`entreprise` (raison sociale, ENT_… ou id) ou par SIRET, pour éviter les doublons.",
       inputSchema: {
         entreprise: z.string().optional().describe("Fiche à mettre à jour (sinon création)"),
         raison_sociale: z.string().optional().describe("Obligatoire en création"),
@@ -310,7 +309,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
           : undefined;
       const res = await enregistrer(client, "participants.php", "id_participant", existant, body, args.dry_run, `${body.prenom} ${body.nom}`);
       if (avertissement && res.content[0]?.type === "text") {
-        res.content[0].text = JSON.stringify({ avertissement, ...JSON.parse(res.content[0].text) }, null, 2);
+        res.content[0].text = JSON.stringify({ avertissement, ...JSON.parse(res.content[0].text) });
       }
       return res;
     },

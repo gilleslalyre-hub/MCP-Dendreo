@@ -17,7 +17,13 @@ import { registerSuiviTools } from "./tools/suivi.js";
 import { registerSyntheseTools } from "./tools/synthese.js";
 
 export function createServer(): McpServer {
-  const server = new McpServer({ name: "dendreo", version: "0.4.0" });
+  const server = new McpServer(
+    { name: "dendreo", version: "0.4.0" },
+    {
+      instructions:
+        "Dendreo (formation). Outils d'écriture : dry_run=true par défaut (rien n'est écrit) ; ne relancer avec dry_run=false qu'après confirmation explicite de l'utilisateur. Ids : numéro complet (ADF_…, ENT_…, MOD_…) ou id numérique, ou nom quand l'outil le permet. Dates AAAA-MM-JJ. Réponses en JSON compact.",
+    },
+  );
   const client = DendreoClient.fromEnv();
   registerSessionTools(server, client);
   registerLectureTools(server, client);
