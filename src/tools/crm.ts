@@ -3,9 +3,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
 import { appliquer } from "./ecriture.js";
 import { findEntreprise, findSession, inscriptionsSession, single } from "./resolve.js";
-import { CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, normalize, num, today, vrai } from "./util.js";
+import { DATE, CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, normalize, num, today, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const ENTREPRISE = z.string().describe("Raison sociale, numéro ENT_… ou id");
 
 /** Garde les champs renseignés, sous leur nom Dendreo. */
@@ -194,8 +193,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Crée un contact (interlocuteur RH, formation, achats…) dans une entreprise, ou met à jour un contact existant " +
-        "retrouvé par son id ou son email. Peut le définir comme contact principal, secondaire ou de facturation. " +
-        "Par défaut dry_run=true : rien n'est écrit.",
+        "retrouvé par son id ou son email. Peut le définir comme contact principal, secondaire ou de facturation.",
       inputSchema: {
         entreprise: ENTREPRISE.optional().describe("Entreprise du contact (obligatoire en création)"),
         id_contact: z.string().optional().describe("Contact à mettre à jour"),
@@ -249,7 +247,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Crée un participant (stagiaire) dans le CRM ou met à jour sa fiche, retrouvée par id ou email (un seul " +
-        "email par participant dans Dendreo). Par défaut dry_run=true : rien n'est écrit.",
+        "email par participant dans Dendreo).",
       inputSchema: {
         id_participant: z.string().optional().describe("Participant à mettre à jour"),
         email: z.string().email().optional(),
@@ -317,7 +315,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
       description:
         "Convertit un participant (ou une entreprise) en particulier, par exemple pour une formation financée en CPF. " +
         "Conditions Dendreo : le participant est seul dans son entreprise et celle-ci a au plus un contact ; une " +
-        "entreprise convertie a au plus un contact et un participant. Par défaut dry_run=true.",
+        "entreprise convertie a au plus un contact et un participant.",
       inputSchema: {
         id_participant: z.string().optional(),
         entreprise: ENTREPRISE.optional(),
@@ -362,7 +360,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Journal commercial : `lister` les échanges d'une entreprise ou d'un commercial, ou les relances à venir ; " +
-        "`ajouter` un compte rendu d'échange avec une date de relance. Ajout en dry_run=true par défaut.",
+        "`ajouter` un compte rendu d'échange avec une date de relance.",
       inputSchema: {
         action: z.enum(["lister", "ajouter"]).default("lister"),
         entreprise: ENTREPRISE.optional(),
@@ -431,7 +429,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Pipe commercial : `lister` les opportunités ouvertes (par étape ou entreprise) avec leurs devis et les sessions " +
-        "issues de ces devis ; `creer` une opportunité pour une entreprise (dry_run=true par défaut).",
+        "issues de ces devis ; `creer` une opportunité pour une entreprise.",
       inputSchema: {
         action: z.enum(["lister", "creer"]).default("lister"),
         entreprise: ENTREPRISE.optional(),
@@ -520,7 +518,7 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
     {
       description:
         "Crée un particulier (personne finançant elle-même sa formation : fiche contact + entreprise + participant) ou met à jour " +
-        "sa fiche, retrouvée par id ou email. Par défaut dry_run=true : rien n'est écrit.",
+        "sa fiche, retrouvée par id ou email.",
       inputSchema: {
         id_contact: z.string().optional().describe("Particulier à mettre à jour (id_contact)"),
         email: z.string().email().optional(),
@@ -569,7 +567,7 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
     {
       description:
         "Transforme un particulier en entreprise + contact + participant (par exemple quand un indépendant devient client avec sa " +
-        "société). Par défaut dry_run=true. Le sens inverse est `convertir_en_particulier`.",
+        "société). Le sens inverse est `convertir_en_particulier`.",
       inputSchema: {
         id_contact: z.string().optional(),
         email: z.string().email().optional().describe("À la place de id_contact"),
@@ -598,7 +596,7 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
         "Dédoublonnage : entreprises par SIRET puis raison sociale ; contacts, participants et particuliers par email. " +
         "Une fiche existante est ignorée, ou mise à jour avec `mettre_a_jour=true`. Les champs de chaque ligne portent le nom " +
         "Dendreo (raison_sociale, siret, nom, prenom, email, fonction…) ; `entreprise` (raison sociale, ENT_… ou id) rattache " +
-        "contacts et participants. Simulation par défaut (dry_run=true) : à relire avant d'exécuter.",
+        "contacts et participants.",
       inputSchema: {
         type: z.enum(["entreprises", "contacts", "participants", "particuliers"]),
         lignes: z.array(LIGNE).min(1).max(MAX_LIGNES),
@@ -679,7 +677,7 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
         "paiement en attente, validées, refusées). Par défaut, seulement les sessions avec des pré-inscriptions à traiter.",
       inputSchema: {
         a_traiter_seulement: z.boolean().default(true),
-        debut_apres: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Sessions commençant à partir de cette date (défaut : aujourd'hui)"),
+        debut_apres: DATE.optional().describe("Sessions commençant à partir de cette date (défaut : aujourd'hui)"),
       },
       annotations: { readOnlyHint: true },
     },
@@ -699,7 +697,7 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
       description:
         "Supprime une action de formation, avec garde-fous : refusé si des participants sont inscrits ou si des présences sont " +
         "saisies (annuler d'abord les inscriptions, ou passer la session à l'étape « Annulée » avec `modifier_session`). " +
-        "Par défaut dry_run=true. Irréversible : ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "Irréversible.",
       inputSchema: { session: z.string().describe("Id ou numéro complet (ADF_…)"), dry_run: z.boolean().default(true) },
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -728,8 +726,7 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
       description:
         "Supprime un participant, un contact, une entreprise ou une action commerciale, avec garde-fous (participant inscrit à des " +
         "sessions, entreprise avec inscriptions : refusé). Supprimer le contact d'un particulier supprime tout le particulier. " +
-        "Une entreprise supprimée peut être restaurée avec `restaurer_entreprise`. Par défaut dry_run=true ; ne relancer avec " +
-        "dry_run=false qu'après confirmation explicite.",
+        "Une entreprise supprimée peut être restaurée avec `restaurer_entreprise`.",
       inputSchema: {
         type: z.enum(["participant", "contact", "entreprise", "action_commerciale"]),
         id: z.string().describe("Id de la fiche"),
@@ -773,7 +770,7 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
   server.registerTool(
     "restaurer_entreprise",
     {
-      description: "Restaure une entreprise supprimée, à partir de son id. Par défaut dry_run=true.",
+      description: "Restaure une entreprise supprimée, à partir de son id.",
       inputSchema: { id_entreprise: z.string(), dry_run: z.boolean().default(true) },
       annotations: { readOnlyHint: false, destructiveHint: false },
     },

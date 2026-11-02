@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DendreoClient } from "./dendreo/client.js";
+import { allegerListeOutils } from "./slim.js";
 import { registerCatalogueTools } from "./tools/catalogue.js";
 import { registerCreationTools } from "./tools/creation.js";
 import { registerCrmNettoyageTools, registerCrmTools } from "./tools/crm.js";
@@ -21,7 +22,9 @@ export function createServer(): McpServer {
     { name: "dendreo", version: "0.4.0" },
     {
       instructions:
-        "Dendreo (formation). Outils d'écriture : dry_run=true par défaut (rien n'est écrit) ; ne relancer avec dry_run=false qu'après confirmation explicite de l'utilisateur. Ids : numéro complet (ADF_…, ENT_…, MOD_…) ou id numérique, ou nom quand l'outil le permet. Dates AAAA-MM-JJ. Réponses en JSON compact.",
+        "Dendreo (formation). Écritures : dry_run=true par défaut (simulation, rien n'est écrit) ; montrer le récapitulatif et ne relancer avec dry_run=false qu'après confirmation explicite de l'utilisateur. " +
+        "Ids : numéro complet (ADF_…, ENT_…, MOD_…) ou id numérique, ou nom quand l'outil le permet ; `session` = id ou numéro ADF_…. " +
+        "Dates AAAA-MM-JJ, mois AAAA-MM. Réponses en JSON compact, clés vides omises.",
     },
   );
   const client = DendreoClient.fromEnv();
@@ -41,5 +44,6 @@ export function createServer(): McpServer {
   registerQualiteTools(server, client);
   registerCatalogueTools(server, client);
   registerGenericTools(server, client);
+  allegerListeOutils(server);
   return server;
 }

@@ -12,10 +12,9 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { DATE, CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 
 const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
 const nomLap = (l: Row) =>
@@ -122,8 +121,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Supprime l'inscription de participants à une action de formation. Refuse les participants dont des présences " +
-        "ou absences sont déjà saisies (à corriger dans Dendreo). Par défaut dry_run=true : rien n'est supprimé. " +
-        "Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "ou absences sont déjà saisies (à corriger dans Dendreo).",
       inputSchema: {
         session: SESSION,
         participants: z.array(z.string()).min(1).describe("Prénom et nom, email, id participant ou id_lap"),
@@ -170,7 +168,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Modifie l'inscription d'un participant à une session : prix personnalisé (session mono-module), numéro de " +
-        "dossier CPF, suivi pédagogique (remplace le texte existant). Par défaut dry_run=true : rien n'est écrit.",
+        "dossier CPF, suivi pédagogique (remplace le texte existant).",
       inputSchema: {
         session: SESSION,
         participant: z.string().describe("Prénom et nom, email, id participant ou id_lap"),
@@ -280,8 +278,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Pour une session à plusieurs modules : affiche à quels modules chaque participant est inscrit, et permet " +
-        "d'inscrire ou désinscrire un participant d'un module. Sans `participant`, liste toute la session. " +
-        "Modifications en dry_run=true par défaut.",
+        "d'inscrire ou désinscrire un participant d'un module. Sans `participant`, liste toute la session.",
       inputSchema: {
         session: SESSION,
         participant: z.string().optional().describe("Prénom et nom, email ou id"),
@@ -417,8 +414,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Crée une nouvelle session à partir d'une session existante (même module, formateur, type, entreprise, salle, " +
-        "places et horaires) sur de nouvelles dates. Les participants ne sont pas copiés. " +
-        "Par défaut dry_run=true : rien n'est créé. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "places et horaires) sur de nouvelles dates. Les participants ne sont pas copiés.",
       inputSchema: {
         session: SESSION,
         dates: z.array(DATE).min(1).describe("Jours de la nouvelle session (AAAA-MM-JJ)"),
@@ -596,8 +592,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Gère les souhaits de formation des participants (besoin exprimé pour un module) : `lister` par module ou " +
-        "participant (ex. qui attend une session Excel ?), `ajouter` un souhait, `supprimer` des souhaits. " +
-        "Ajout et suppression en dry_run=true par défaut.",
+        "participant (ex. qui attend une session Excel ?), `ajouter` un souhait, `supprimer` des souhaits.",
       inputSchema: {
         action: z.enum(["lister", "ajouter", "supprimer"]).default("lister"),
         formation: z.string().optional().describe("Module : intitulé, MOD_… ou id"),
@@ -659,7 +654,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Liste les entreprises rattachées à une session (mode de financement, contact référent) et permet de changer " +
-        "le contact référent d'une entreprise pour cette session (dry_run=true par défaut).",
+        "le contact référent d'une entreprise pour cette session.",
       inputSchema: {
         session: SESSION,
         id_lae: z.string().optional().describe("Pour changer le contact : lien session-entreprise (donné par la liste)"),
@@ -703,7 +698,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Liste les sessions permanentes (entrées et sorties permanentes) d'un module ou de tout le catalogue, " +
-        "et permet d'en modifier le prix, la durée, l'ouverture ou la garantie (dry_run=true par défaut).",
+        "et permet d'en modifier le prix, la durée, l'ouverture ou la garantie.",
       inputSchema: {
         formation: z.string().optional().describe("Module : intitulé, MOD_… ou id"),
         id: z.string().optional().describe("Pour modifier : id de la session permanente"),

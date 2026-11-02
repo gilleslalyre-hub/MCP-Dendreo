@@ -3,10 +3,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
 import { appliquer, champs } from "./ecriture.js";
 import { findEntreprise, findFormateur, findModule, findSalle, findSession, single } from "./resolve.js";
-import { arrondi, heuresCreneau, json, nomDe, normalize, num, vrai } from "./util.js";
+import { DATE, arrondi, heuresCreneau, json, nomDe, normalize, num, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 
 export function registerCatalogueTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
@@ -15,8 +14,7 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
       description:
         "Crée ou modifie un module du catalogue (contenu pédagogique, durée, prix, catégorie, formateurs aptes, planning type) " +
         "ou le supprime (refusé s'il est programmé dans des sessions). Planning type : `jours` seul, ou `jours` + `duree_par_jour`, " +
-        "ou `jours` + `creneaux` (ex. 08:30-11:00;14:30-16:50). Par défaut dry_run=true : rien n'est écrit. " +
-        "Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "ou `jours` + `creneaux` (ex. 08:30-11:00;14:30-16:50).",
       inputSchema: {
         module: z.string().optional().describe("Module existant à modifier ou supprimer (intitulé, MOD_… ou id) ; vide = création"),
         supprimer: z.boolean().default(false),
@@ -111,7 +109,7 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
     {
       description:
         "Arborescence des catégories de modules du catalogue, et modules sans catégorie (invisibles dans le catalogue public classé). " +
-        "Permet de créer ou modifier une catégorie (dry_run=true par défaut).",
+        "Permet de créer ou modifier une catégorie.",
       inputSchema: {
         creer: z.string().optional().describe("Intitulé d'une catégorie à créer"),
         modifier: z.string().optional().describe("Catégorie à modifier (intitulé ou id)"),
@@ -168,8 +166,7 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
     {
       description:
         "Crée ou modifie une fiche formateur (statut, statut BPF, rémunération, n° de déclaration d'activité, coordonnées) avec " +
-        "détection des doublons (nom + prénom, email), ou la supprime. Par défaut dry_run=true : rien n'est écrit. " +
-        "Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "détection des doublons (nom + prénom, email), ou la supprime.",
       inputSchema: {
         formateur: z.string().optional().describe("Formateur existant à modifier ou supprimer (prénom nom ou id) ; vide = création"),
         supprimer: z.boolean().default(false),
@@ -244,8 +241,7 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
     {
       description:
         "Crée une salle : interne (centre de formation), externe, virtuelle (e-learning) ou chez le client. L'API refuse la " +
-        "modification et la suppression d'une salle : elles se font dans Dendreo. `lister_centres=true` liste les centres de formation. " +
-        "Par défaut dry_run=true : rien n'est écrit.",
+        "modification et la suppression d'une salle : elles se font dans Dendreo. `lister_centres=true` liste les centres de formation.",
       inputSchema: {
         lister_centres: z.boolean().default(false),
         intitule: z.string().optional().describe("Nom de la salle"),
@@ -297,7 +293,7 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
       description:
         "Lecture : pour chaque module d'une session, heures prévues comparées aux heures planifiées sur des créneaux (reste à planifier). " +
         "Écriture : ajoute un module à une session existante (avec une durée pour une planification progressive) ou crée une séance " +
-        "alternative d'un module programmé (option multi-séance de Dendreo). Par défaut dry_run=true : rien n'est écrit.",
+        "alternative d'un module programmé (option multi-séance de Dendreo).",
       inputSchema: {
         session: SESSION,
         ajouter_module: z.string().optional().describe("Module à programmer dans la session (intitulé, MOD_… ou id)"),

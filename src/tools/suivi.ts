@@ -9,10 +9,9 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { DATE, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 
 const slotLabel = (c: Row | undefined) => {
   if (!c) return "créneau inconnu";
@@ -363,8 +362,7 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Enregistre l'évaluation d'un participant sur un module d'une session (réussite, note, appréciation) ou sur une " +
-        "compétence (acquis, en cours, non acquis). Par défaut dry_run=true : rien n'est écrit. " +
-        "Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "compétence (acquis, en cours, non acquis).",
       inputSchema: {
         session: SESSION,
         participant: z.string().describe("Prénom et nom, email ou id du participant"),

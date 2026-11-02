@@ -4,9 +4,8 @@ import type { DendreoClient, Row } from "../dendreo/client.js";
 import { resumeEmail } from "./documents.js";
 import { findSession, inscriptionsSession, single } from "./resolve.js";
 import { statut } from "./suivi.js";
-import { json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { DATE, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const nomLap = (l: Row | undefined) => nomDe(l?.participant) ?? "Participant non identifié";
 
 /** Tâches extranet en attente des participants d'une session, regroupées par participant. */
@@ -31,7 +30,7 @@ export function registerSyntheseTools(server: McpServer, client: DendreoClient) 
         "Synthèse d'une action de formation en un appel : remplissage et places, étape, staffing des créneaux, " +
         "assiduité et présences manquantes, émargements et questionnaires en attente, emails non délivrés, " +
         "avancement des checklists, et la liste des points d'attention.",
-      inputSchema: { session: z.string().describe("Id ou numéro ADF_…") },
+      inputSchema: { session: z.string() },
       annotations: { readOnlyHint: true },
     },
     async (args) => {

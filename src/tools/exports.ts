@@ -2,9 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
-import { arrondi, heuresCreneau, json, lots, num, today } from "./util.js";
+import { DATE, arrondi, heuresCreneau, json, lots, num, today } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** Au-delà, un export CSV est renvoyé en pièce jointe plutôt qu'en texte. */
 const MAX_TEXTE = 20_000;

@@ -3,9 +3,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { DendreoClient, Query, Row } from "../dendreo/client.js";
 import { findEntreprise, findFormateur, findInscription, findModule, findSession, inscriptionsSession, single } from "./resolve.js";
-import { json, nomDe, vrai } from "./util.js";
+import { DATE, json, nomDe, vrai } from "./util.js";
 
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
 const nomLap = (l: Row) => nomDe(l.participant) ?? `participant ${l.id_participant}`;
 
@@ -169,8 +169,7 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
       description:
         "Gère les fichiers stockés dans Dendreo : `lister` ceux d'une session, d'un participant, d'une entreprise, d'un " +
         "formateur ou d'un module (espace de stockage par défaut, ou une collection : partage_adf_participants, " +
-        "partage_participant, fichiers_lies_adf…) ; `deposer` un fichier (contenu en base64) ; `supprimer` des fichiers. " +
-        "Dépôt et suppression en dry_run=true par défaut.",
+        "partage_participant, fichiers_lies_adf…) ; `deposer` un fichier (contenu en base64) ; `supprimer` des fichiers.",
       inputSchema: {
         action: z.enum(["lister", "deposer", "supprimer"]).default("lister"),
         cible: z.enum(["action-de-formation", "participant", "entreprise", "formateur", "module", "contact", "lap", "laf", "lae", "salle"]).optional().describe("Sans cible, un dépôt part sans rattachement (tri automatique par QR code de Dendreo)"),
@@ -252,8 +251,8 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
         destinataire: z.string().optional().describe("Adresse email du destinataire"),
         echecs_seulement: z.boolean().default(false),
         evenement: z.enum(["delivered", "dropped", "bounced", "complained"]).optional().describe("Filtrer sur le statut d'un destinataire"),
-        du: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Emails envoyés à partir de cette date"),
-        au: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Emails envoyés jusqu'à cette date"),
+        du: DATE.optional().describe("Emails envoyés à partir de cette date"),
+        au: DATE.optional().describe("Emails envoyés jusqu'à cette date"),
         decalage: z.number().int().min(0).default(0).describe("Pagination : l'API renvoie 100 emails à partir de ce rang"),
       },
       annotations: { readOnlyHint: true },
@@ -280,7 +279,7 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
       description:
         "Affiche l'avancement des checklists d'une session (ou d'un formateur, d'un module) et permet de cocher ou " +
         "décocher, ajouter, renommer ou supprimer des points ; `portefeuille=true` liste les sessions INTER dont la " +
-        "checklist est incomplète. Modifications en dry_run=true par défaut.",
+        "checklist est incomplète.",
       inputSchema: {
         session: SESSION.optional(),
         cible: z.enum(["formateur", "module", "lap", "laf"]).optional().describe("Autre cible que la session"),

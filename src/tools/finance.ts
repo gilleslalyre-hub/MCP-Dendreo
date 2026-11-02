@@ -4,10 +4,9 @@ import type { DendreoClient, Query, Row } from "../dendreo/client.js";
 import { appliquer, champs } from "./ecriture.js";
 import { fichierResultat } from "./exports.js";
 import { findEntreprise, findSession, single } from "./resolve.js";
-import { LIMITE, addDays, arrondi, borner, compact, dateRenseignee, json, normalize, num, today } from "./util.js";
+import { DATE, LIMITE, addDays, arrondi, borner, compact, dateRenseignee, json, normalize, num, today } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 
 const FORMATS_COMPTA = [
   "ebp", "ebp_v2", "ebp_v3", "ebp_aux", "ebp_aux_txt", "generique", "generique_txt", "sage_pnm", "sage_50", "sage_x3",
@@ -140,8 +139,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Liste les règlements (par facture ou période), ou en saisit, modifie ou supprime un. Seuls les règlements non exportés en " +
-        "comptabilité sont modifiables ou supprimables. Écritures en dry_run=true par défaut : ne relancer avec dry_run=false " +
-        "qu'après confirmation explicite.",
+        "comptabilité sont modifiables ou supprimables.",
       inputSchema: {
         action: z.enum(["lister", "creer", "modifier", "supprimer"]).default("lister"),
         facture: z.string().optional().describe("Numéro complet (FA_…) ou id de facture"),
@@ -209,7 +207,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Qui finance quoi : financements d'une session, d'une entreprise ou d'un financeur (OPCO, entreprise, CPF), avec " +
-        "montants financé / facturé / payé et participants concernés. Peut supprimer un financement (dry_run=true par défaut) ; " +
+        "montants financé / facturé / payé et participants concernés. Peut supprimer un financement ; " +
         "la création et la modification ne sont pas possibles via l'API.",
       inputSchema: {
         session: SESSION.optional(),

@@ -4,10 +4,9 @@ import type { DendreoClient, Row } from "../dendreo/client.js";
 import { appliquer } from "./ecriture.js";
 import { findSession, single } from "./resolve.js";
 import { statut } from "./suivi.js";
-import { json, lots, nomDe, normalize, num, splitDateTime, today, vrai } from "./util.js";
+import { DATE, json, lots, nomDe, normalize, num, splitDateTime, today, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 
 const FIELDS_ADF = "id_action_de_formation,numero_complet,intitule,type,date_debut,date_fin,id_etape_process,include_in_bpf,objectif,num_session_dpc,nb_participants_inscrits";
 
@@ -122,7 +121,7 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
       description:
         "Lecture : intervenants extérieurs (formateurs « exterieur », entreprise sous-traitante) et financements de type " +
         "sous-traitance sur une période. Écriture : bascule le statut BPF d'un formateur d'une session entre intérieur et " +
-        "extérieur (dry_run=true par défaut ; ne relancer avec dry_run=false qu'après confirmation explicite).",
+        "extérieur.",
       inputSchema: {
         ...PERIODE_SCHEMA,
         session: SESSION.optional().describe("Avec `statut_bpf` : session concernée"),

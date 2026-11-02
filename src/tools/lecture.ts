@@ -4,7 +4,6 @@ import type { DendreoClient, Row } from "../dendreo/client.js";
 import { findEntreprise, findEtape, findFormateur, findModule, findSalle, findSession, single } from "./resolve.js";
 import { LIMITE, borner, json, splitDateTime, today } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const nomDe = (p: unknown) => {
   const r = (p ?? {}) as Row;
   return [r.prenom, r.nom].filter(Boolean).join(" ") || undefined;
@@ -199,7 +198,13 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
               : await client.list("salles_de_formation.php", { fields: "id_salle_de_formation,intitule,ville" }),
           );
         case "etapes":
-          return liste(recherche ? await findEtape(client, recherche) : await client.list("etapes.php"));
+          return liste(
+            (recherche ? await findEtape(client, recherche) : await client.list("etapes.php")).map((e) => ({
+              id_etape_process: e.id_etape_process,
+              intitule: e.intitule,
+              cible: e.cible,
+            })),
+          );
       }
     },
   );
