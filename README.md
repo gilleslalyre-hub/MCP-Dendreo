@@ -4,7 +4,7 @@ Serveur MCP qui permet à Claude (claude.ai) d'interroger l'API de Dendreo.
 
 ## Outils
 
-Le serveur expose 79 outils regroupés par thème. Pour chaque thème, la **lecture** consulte Dendreo sans rien modifier ; l'**écriture** est toujours en **simulation par défaut** (`dry_run=true`) : l'outil montre ce qu'il ferait, et rien n'est écrit tant que l'utilisateur n'a pas confirmé. Un outil qui sait lire et écrire apparaît dans les deux tableaux.
+Le serveur expose 66 outils regroupés par thème. Pour chaque thème, la **lecture** consulte Dendreo sans rien modifier ; l'**écriture** est toujours en **simulation par défaut** (`dry_run=true`) : l'outil montre ce qu'il ferait, et rien n'est écrit tant que l'utilisateur n'a pas confirmé. Un outil qui sait lire et écrire apparaît dans les deux tableaux.
 
 ### Sessions et planning
 
@@ -33,7 +33,7 @@ Lecture :
 | `entreprises_session` | Change le contact référent d'une entreprise pour la session |
 | `sessions_permanentes` | Modifie prix, durée, ouverture ou garantie d'une session permanente |
 | `planification_progressive` | Heures prévues et planifiées par module ; ajoute un module à une session existante ; crée une séance alternative |
-| `supprimer_session` | Supprime une session (refusé s'il y a des inscrits, des présences ou des factures) |
+| `supprimer_fiche` | Supprime une session (refusé s'il y a des inscrits, des présences ou des factures) ; voir aussi la partie CRM |
 
 `creer_session` enchaîne : `actions_de_formation.php` (avec `id_module` et `id_formateur`) → `lams.php` → alignement de `creneaux.php` sur les jours demandés (les créneaux générés par défaut hors de ces jours sont retirés) → `lcfs.php` pour staffer le formateur sur chaque créneau.
 
@@ -73,7 +73,7 @@ Lecture :
 |---|---|
 | `staffer_formateur` | Ajoute un formateur ou une entreprise sous-traitante à une session (tous les créneaux ou certains jours), en remplaçant éventuellement un autre |
 | `enregistrer_formateur` | Crée, modifie ou supprime une fiche formateur (statut, statut BPF, rémunération, n° de déclaration d'activité), avec détection des doublons |
-| `retirer_formateur` | Déstaffe un formateur (certains jours ou toute la session) |
+| `staffer_formateur` (`retirer=true`) | Déstaffe un formateur (certains jours ou toute la session) |
 
 ### Suivi pédagogique
 
@@ -84,9 +84,9 @@ Lecture :
 | `feuille_presence` | Présences/absences par participant et créneau, heures suivies, assiduité |
 | `emargements_manquants` | Créneaux passés sans présence renseignée, pour une session ou une période |
 | `taches_en_attente` | Émargements, signatures et questionnaires en attente sur l'extranet, avec les liens de relance |
-| `evaluations_session` | Réussite par module, notes, compétences acquises |
+| `evaluations` | Réussite par module, notes, compétences acquises |
 | `satisfaction` | Rapport de satisfaction par session, formateur ou formation : taux de réponse, non-répondants, moyennes par module et par formateur, détail par question, verbatims ; avec `seuil_pourcent` : appréciations négatives sur une période ; relance des non-répondants : `taches_en_attente` (types=satisfaction, autologin) |
-| `validation_emargements` | Créneaux passés où le formateur ou des participants n'ont pas signé |
+| `emargements_manquants` (`controle=signatures`) | Créneaux passés où le formateur ou des participants n'ont pas signé |
 | `controle_conformite_session` | Avant les attestations : présences manquantes, émargements non signés, participants éligibles |
 
 Écriture :
@@ -94,7 +94,7 @@ Lecture :
 | Outil | Rôle |
 |---|---|
 | `saisir_presences` | Marque présent ou absent (justifié ou non, partiel) sur des jours ou créneaux |
-| `evaluer_participant` | Enregistre une évaluation de module ou de compétence |
+| `evaluations` (avec `participant`) | Enregistre une évaluation de module ou de compétence |
 
 ### Catalogue
 
@@ -132,12 +132,10 @@ Lecture :
 | `enregistrer_entreprise` | Crée ou met à jour une entreprise, avec détection des doublons (SIRET, raison sociale) |
 | `enregistrer_contact` | Crée ou met à jour un contact d'entreprise (principal, secondaire, facturation) |
 | `enregistrer_participant` | Crée ou met à jour un participant, retrouvé par id ou email |
-| `convertir_en_particulier` | Convertit un participant ou une entreprise en particulier |
+| `convertir_particulier` | `vers_particulier` : participant ou entreprise → particulier ; `vers_entreprise` : particulier → entreprise + contact + participant |
 | `enregistrer_particulier` | Crée ou met à jour un particulier, retrouvé par id ou email |
-| `convertir_particulier_en_entreprise` | Transforme un particulier en entreprise + contact + participant |
 | `importer_crm` | Import en masse d'entreprises, contacts, participants ou particuliers, avec dédoublonnage (SIRET, raison sociale, email) |
-| `supprimer_fiche` | Supprime un participant, un contact, une entreprise ou une action commerciale, avec garde-fous |
-| `restaurer_entreprise` | Restaure une entreprise supprimée |
+| `supprimer_fiche` | Supprime un participant, un contact, une entreprise ou une action commerciale, avec garde-fous ; `restaurer=true` restaure une entreprise |
 | `actions_commerciales` | Ajoute un compte rendu d'échange avec une date de relance |
 | `opportunites` | Crée une opportunité pour une entreprise |
 
@@ -172,7 +170,7 @@ Lecture :
 | Outil | Rôle |
 |---|---|
 | `factures` | Factures par session, entreprise, financeur ou période : montants, restant dû, échéance, statut, niveau de relance, lien PDF |
-| `impayes` | Factures échues non soldées, groupées par client ou financeur, avec le retard en jours |
+| `factures` (`vue=impayes`) | Factures échues non soldées, groupées par client ou financeur, avec le retard en jours |
 | `reglements` | Règlements par facture ou période |
 | `financements` | Qui finance quoi sur une session, une entreprise ou un financeur : financé, facturé, payé, participants concernés |
 | `financeurs` | Recherche d'un financeur (OPCO…), ses factures et ses contacts |
@@ -205,7 +203,7 @@ Lecture :
 | Outil | Rôle |
 |---|---|
 | `controle_bpf` | Sessions exclues ou mal renseignées pour le BPF : case décochée, étape non confirmée, sans financement, présences manquantes, objectif ou spécialité vides |
-| `controle_statuts_bpf` | Participants au statut BPF non renseigné, entreprises qui ressemblent à un financeur |
+| `qualite_crm` (`controle=statuts_bpf`) | Participants au statut BPF non renseigné, entreprises qui ressemblent à un financeur |
 | `sous_traitance` | Intervenants extérieurs et financements de sous-traitance (cadres F-2 et G du BPF) |
 | `dpc` | Modules éligibles DPC, sessions sans numéro DPC, participants sans ADELI / RPPS |
 

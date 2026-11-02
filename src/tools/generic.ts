@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient } from "../dendreo/client.js";
-import { json } from "./util.js";
+import { json, serialiser } from "./util.js";
 
 const MAX_CARS = 12_000;
 
@@ -24,9 +24,9 @@ export function registerGenericTools(server: McpServer, client: DendreoClient) {
     },
     async ({ endpoint, params }) => {
       const data = await client.get(endpoint, params);
-      const texte = JSON.stringify(data);
+      const texte = serialiser(data);
       if (texte.length <= MAX_CARS) return { content: [{ type: "text", text: texte }] };
-      const extrait = Array.isArray(data) ? JSON.stringify(data.slice(0, Math.max(1, Math.floor((MAX_CARS / texte.length) * data.length)))) : texte.slice(0, MAX_CARS);
+      const extrait = Array.isArray(data) ? serialiser(data.slice(0, Math.max(1, Math.floor((MAX_CARS / texte.length) * data.length)))) : texte.slice(0, MAX_CARS);
       return json({ tronque: true, total_cars: texte.length, avertissement: "Réponse tronquée : ajouter `fields` et des filtres dans `params`.", extrait: Array.isArray(data) ? JSON.parse(extrait) : extrait });
     },
   );

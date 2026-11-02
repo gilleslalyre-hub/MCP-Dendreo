@@ -12,10 +12,9 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { DATE, CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 
 const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
 const nomLap = (l: Row) =>
@@ -41,6 +40,63 @@ async function presencesSaisies(client: DendreoClient, idAdf: string, idLap: str
 
 /** Deux intervalles « AAAA-MM-JJ HH:MM:SS » se chevauchent-ils ? */
 const chevauche = (a: Row, b: Row) => String(a.date_debut) < String(b.date_fin) && String(b.date_debut) < String(a.date_fin);
+
+/**
+ * Déstaffe un formateur d'une session, sur tous ses créneaux (il est alors retiré de la session) ou sur certains jours.
+ * Utilisé par `staffer_formateur` avec `retirer=true`.
+ */
+export async function retirerFormateur(
+  client: DendreoClient,
+  args: { session: string; formateur: string; jours?: string[]; dry_run: boolean },
+) {
+  const s = await sessionOuErreur(client, args.session);
+  if (!("row" in s)) return json(s);
+  const f = single(await findFormateur(client, args.formateur), "Formateur");
+  if (!("row" in f)) return json(f);
+  const idAdf = String(s.row.id_action_de_formation);
+  const idF = String(f.row.id_formateur);
+  const [lafs, lcfs, creneaux] = await Promise.all([
+    client.list("lafs.php", { id_action_de_formation: idAdf }),
+    client.list("lcfs.php", { id_action_de_formation: idAdf }),
+    client.list("creneaux.php", { id_action_de_formation: idAdf }),
+  ]);
+  const laf = lafs.find((l) => String(l.id_formateur) === idF);
+  if (!laf) return json({ erreur: "Ce formateur n'est pas staffé sur cette session." });
+  const creneauById = new Map(creneaux.map((c) => [String(c.id_creneau), c]));
+  const siens = lcfs.filter(
+    (l) => vrai(l.status) && (String(l.id_formateur ?? "") === idF || String(l.id_laf) === String(laf.id_laf)),
+  );
+  const cibles = args.jours
+    ? siens.filter((l) => args.jours!.includes(splitDateTime(creneauById.get(String(l.id_creneau))?.date_debut).date))
+    : siens;
+  const retraitComplet = !args.jours || cibles.length === siens.length;
+  const recap = {
+    session: sessionLabel(s.row),
+    formateur: `${f.row.prenom} ${f.row.nom}`,
+    creneaux_a_destaffer: cibles.map((l) => slotLabel(creneauById.get(String(l.id_creneau)) ?? {})),
+    retire_de_la_session: retraitComplet,
+  };
+  if (args.dry_run) return json({ dry_run: true, ...recap });
+  const journal: string[] = [];
+  for (const l of cibles) {
+    const label = slotLabel(creneauById.get(String(l.id_creneau)) ?? {});
+    try {
+      await client.post("lcfs.php", { id_creneau: l.id_creneau, id_formateur: idF, status: 0 });
+      journal.push(`${label} : déstaffé`);
+    } catch (e) {
+      journal.push(`${label} : ${erreur(e)}`);
+    }
+  }
+  if (retraitComplet) {
+    try {
+      await client.delete("lafs.php", { id_laf: String(laf.id_laf) });
+      journal.push("Formateur retiré de la session");
+    } catch (e) {
+      journal.push(`Retrait de la session : ${erreur(e)}`);
+    }
+  }
+  return json({ ...recap, journal });
+}
 
 export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
@@ -122,8 +178,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Supprime l'inscription de participants à une action de formation. Refuse les participants dont des présences " +
-        "ou absences sont déjà saisies (à corriger dans Dendreo). Par défaut dry_run=true : rien n'est supprimé. " +
-        "Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "ou absences sont déjà saisies (à corriger dans Dendreo).",
       inputSchema: {
         session: SESSION,
         participants: z.array(z.string()).min(1).describe("Prénom et nom, email, id participant ou id_lap"),
@@ -170,7 +225,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Modifie l'inscription d'un participant à une session : prix personnalisé (session mono-module), numéro de " +
-        "dossier CPF, suivi pédagogique (remplace le texte existant). Par défaut dry_run=true : rien n'est écrit.",
+        "dossier CPF, suivi pédagogique (remplace le texte existant).",
       inputSchema: {
         session: SESSION,
         participant: z.string().describe("Prénom et nom, email, id participant ou id_lap"),
@@ -280,8 +335,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Pour une session à plusieurs modules : affiche à quels modules chaque participant est inscrit, et permet " +
-        "d'inscrire ou désinscrire un participant d'un module. Sans `participant`, liste toute la session. " +
-        "Modifications en dry_run=true par défaut.",
+        "d'inscrire ou désinscrire un participant d'un module. Sans `participant`, liste toute la session.",
       inputSchema: {
         session: SESSION,
         participant: z.string().optional().describe("Prénom et nom, email ou id"),
@@ -347,78 +401,13 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     },
   );
 
-  server.registerTool(
-    "retirer_formateur",
-    {
-      description:
-        "Déstaffe un formateur d'une session, sur tous ses créneaux (il est alors retiré de la session) ou sur certains " +
-        "jours. Dendreo refuse si le formateur a émargé ou est facturé, ou si un participant l'a déjà noté.",
-      inputSchema: {
-        session: SESSION,
-        formateur: z.string().describe("Prénom et nom, ou id"),
-        jours: z.array(DATE).optional().describe("Limiter à ces jours. Par défaut tous les créneaux et la session"),
-        dry_run: z.boolean().default(true),
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true },
-    },
-    async (args) => {
-      const s = await sessionOuErreur(client, args.session);
-      if (!("row" in s)) return json(s);
-      const f = single(await findFormateur(client, args.formateur), "Formateur");
-      if (!("row" in f)) return json(f);
-      const idAdf = String(s.row.id_action_de_formation);
-      const idF = String(f.row.id_formateur);
-      const [lafs, lcfs, creneaux] = await Promise.all([
-        client.list("lafs.php", { id_action_de_formation: idAdf }),
-        client.list("lcfs.php", { id_action_de_formation: idAdf }),
-        client.list("creneaux.php", { id_action_de_formation: idAdf }),
-      ]);
-      const laf = lafs.find((l) => String(l.id_formateur) === idF);
-      if (!laf) return json({ erreur: "Ce formateur n'est pas staffé sur cette session." });
-      const creneauById = new Map(creneaux.map((c) => [String(c.id_creneau), c]));
-      const siens = lcfs.filter(
-        (l) => vrai(l.status) && (String(l.id_formateur ?? "") === idF || String(l.id_laf) === String(laf.id_laf)),
-      );
-      const cibles = args.jours
-        ? siens.filter((l) => args.jours!.includes(splitDateTime(creneauById.get(String(l.id_creneau))?.date_debut).date))
-        : siens;
-      const retraitComplet = !args.jours || cibles.length === siens.length;
-      const recap = {
-        session: sessionLabel(s.row),
-        formateur: `${f.row.prenom} ${f.row.nom}`,
-        creneaux_a_destaffer: cibles.map((l) => slotLabel(creneauById.get(String(l.id_creneau)) ?? {})),
-        retire_de_la_session: retraitComplet,
-      };
-      if (args.dry_run) return json({ dry_run: true, ...recap });
-      const journal: string[] = [];
-      for (const l of cibles) {
-        const label = slotLabel(creneauById.get(String(l.id_creneau)) ?? {});
-        try {
-          await client.post("lcfs.php", { id_creneau: l.id_creneau, id_formateur: idF, status: 0 });
-          journal.push(`${label} : déstaffé`);
-        } catch (e) {
-          journal.push(`${label} : ${erreur(e)}`);
-        }
-      }
-      if (retraitComplet) {
-        try {
-          await client.delete("lafs.php", { id_laf: String(laf.id_laf) });
-          journal.push("Formateur retiré de la session");
-        } catch (e) {
-          journal.push(`Retrait de la session : ${erreur(e)}`);
-        }
-      }
-      return json({ ...recap, journal });
-    },
-  );
 
   server.registerTool(
     "dupliquer_session",
     {
       description:
         "Crée une nouvelle session à partir d'une session existante (même module, formateur, type, entreprise, salle, " +
-        "places et horaires) sur de nouvelles dates. Les participants ne sont pas copiés. " +
-        "Par défaut dry_run=true : rien n'est créé. Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "places et horaires) sur de nouvelles dates. Les participants ne sont pas copiés.",
       inputSchema: {
         session: SESSION,
         dates: z.array(DATE).min(1).describe("Jours de la nouvelle session (AAAA-MM-JJ)"),
@@ -596,8 +585,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Gère les souhaits de formation des participants (besoin exprimé pour un module) : `lister` par module ou " +
-        "participant (ex. qui attend une session Excel ?), `ajouter` un souhait, `supprimer` des souhaits. " +
-        "Ajout et suppression en dry_run=true par défaut.",
+        "participant (ex. qui attend une session Excel ?), `ajouter` un souhait, `supprimer` des souhaits.",
       inputSchema: {
         action: z.enum(["lister", "ajouter", "supprimer"]).default("lister"),
         formation: z.string().optional().describe("Module : intitulé, MOD_… ou id"),
@@ -659,7 +647,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Liste les entreprises rattachées à une session (mode de financement, contact référent) et permet de changer " +
-        "le contact référent d'une entreprise pour cette session (dry_run=true par défaut).",
+        "le contact référent d'une entreprise pour cette session.",
       inputSchema: {
         session: SESSION,
         id_lae: z.string().optional().describe("Pour changer le contact : lien session-entreprise (donné par la liste)"),
@@ -703,7 +691,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Liste les sessions permanentes (entrées et sorties permanentes) d'un module ou de tout le catalogue, " +
-        "et permet d'en modifier le prix, la durée, l'ouverture ou la garantie (dry_run=true par défaut).",
+        "et permet d'en modifier le prix, la durée, l'ouverture ou la garantie.",
       inputSchema: {
         formation: z.string().optional().describe("Module : intitulé, MOD_… ou id"),
         id: z.string().optional().describe("Pour modifier : id de la session permanente"),

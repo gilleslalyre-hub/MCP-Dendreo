@@ -1,9 +1,23 @@
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-export function json(data: unknown): CallToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(data) }] };
+/**
+ * Sérialise en JSON compact en omettant les clés vides (null, "", dates « 0000-00-00 ») :
+ * les fiches brutes Dendreo en contiennent beaucoup, et chacune coûte des tokens.
+ */
+export function serialiser(data: unknown): string {
+  return JSON.stringify(data, function (_k, v) {
+    if (Array.isArray(this)) return v;
+    return v === null || v === "" || (typeof v === "string" && v.startsWith("0000-00-00")) ? undefined : v;
+  });
 }
+
+export function json(data: unknown): CallToolResult {
+  return { content: [{ type: "text", text: serialiser(data) }] };
+}
+
+/** Date AAAA-MM-JJ (message explicite : le motif n'est pas annoncé dans le schéma, cf. slim.ts). */
+export const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "format attendu AAAA-MM-JJ");
 
 /** Date du jour au format AAAA-MM-JJ, fuseau Europe/Paris. */
 export function today(): string {
@@ -53,7 +67,7 @@ export const vrai = (v: unknown) => v === true || String(v) === "1";
 export const CHAMPS_PERSONNALISES = z
   .record(z.union([z.string(), z.number(), z.boolean()]))
   .optional()
-  .describe("Champs personnalisés par nom technique (visible dans Dendreo, configuration des champs additionnels)");
+  .describe("Champs additionnels par nom technique");
 
 /** Nombre issu d'une valeur Dendreo (chaîne vide ou absente → 0). */
 export const num = (v: unknown): number => {
@@ -82,7 +96,7 @@ export function heuresCreneau(c: Record<string, unknown>): number {
 export const dateRenseignee = (v: unknown): boolean => !!v && !String(v).startsWith("0000");
 
 /** Paramètre `limite` commun aux outils de liste. */
-export const LIMITE = z.number().int().min(1).max(500).optional().describe("Nb max de lignes (défaut 50)");
+export const LIMITE = z.number().int().min(1).max(500).optional().describe("défaut 50");
 
 /**
  * Borne une liste pour limiter la taille de la réponse : renvoie `items` (tronqué) et,

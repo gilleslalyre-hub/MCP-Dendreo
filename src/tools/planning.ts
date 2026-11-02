@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DendreoError, type DendreoClient, type Row } from "../dendreo/client.js";
+import { retirerFormateur } from "./gestion.js";
 import { findEntreprise, findFormateur, findSalle, findSession, single } from "./resolve.js";
-import { LIMITE, addDays, borner, heuresCreneau, json, nomDe, splitDateTime, today } from "./util.js";
+import { DATE, LIMITE, addDays, borner, heuresCreneau, json, nomDe, splitDateTime, today } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const HEURE = z.string().regex(/^\d{2}:\d{2}$/);
 
 const slotLabel = (c: Row) => {
@@ -26,18 +26,24 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
     {
       description:
         "Ajoute un formateur à une action de formation et l'affecte à tous ses créneaux ou à certains jours. " +
-        "Peut remplacer un autre formateur sur ces créneaux (il en est déstaffé).",
+        "Peut remplacer un autre formateur sur ces créneaux (il en est déstaffé). `retirer=true` : déstaffe `formateur` " +
+        "(certains jours, ou tous ses créneaux et la session) ; Dendreo refuse s'il a émargé, est facturé ou a été noté.",
       inputSchema: {
-        session: z.string().describe("Id ou numéro ADF_…"),
+        session: z.string(),
         formateur: z.string().optional().describe("Formateur à staffer : prénom et nom, ou id (ou utiliser entreprise_sous_traitante)"),
         entreprise_sous_traitante: z.string().optional().describe("Entreprise sous-traitante à staffer à la place d'un formateur (raison sociale, ENT_… ou id) : ajoutée à la session, sans créneaux"),
         jours: z.array(DATE).optional().describe("Limiter à ces jours (AAAA-MM-JJ). Par défaut tous les créneaux"),
         remplace: z.string().optional().describe("Formateur à retirer de ces créneaux : prénom et nom, ou id"),
+        retirer: z.boolean().default(false),
         dry_run: z.boolean().default(true),
       },
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async (args) => {
+      if (args.retirer) {
+        if (!args.formateur) return json({ erreur: "Préciser le formateur à retirer." });
+        return retirerFormateur(client, { session: args.session, formateur: args.formateur, jours: args.jours, dry_run: args.dry_run });
+      }
       const s = single(await findSession(client, args.session, "id_action_de_formation,numero_complet,intitule"), "Session");
       if (!("row" in s)) return json(s);
       if (args.entreprise_sous_traitante) {
@@ -122,7 +128,7 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
         "de créneaux existants, décaler des créneaux d'un nombre de jours, ou définir la salle / le lien visio d'un créneau " +
         "(alerte si la capacité de la salle est inférieure aux inscrits). Un créneau émargé ne peut pas être modifié.",
       inputSchema: {
-        session: z.string().describe("Id ou numéro ADF_…"),
+        session: z.string(),
         ajouter: z
           .array(z.object({ date: DATE, heure_debut: HEURE, heure_fin: HEURE, intitule: z.string().optional(),
           salle: z.string().optional().describe("Salle (intitulé ou id) du créneau"),
@@ -258,7 +264,7 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
         "Réponses des formateurs aux invitations RSVP, créneau par créneau : Oui, Non, Peut-être ou sans réponse, avec la date " +
         "d'envoi et les remarques. L'envoi des invitations se fait dans Dendreo (l'API ne le permet pas).",
       inputSchema: {
-        session: z.string().optional().describe("Id ou numéro ADF_…"),
+        session: z.string().optional(),
         formateur: z.string().optional().describe("Prénom et nom, ou id"),
         du: DATE.optional().describe("Sans session : début de période (défaut : aujourd'hui)"),
         au: DATE.optional().describe("Sans session : fin de période (défaut : dans 30 jours)"),

@@ -3,11 +3,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
 import { findEntreprise, findEtape, findFormateur, findModule, findSalle, single } from "./resolve.js";
-import { CHAMPS_PERSONNALISES, json } from "./util.js";
+import { DATE, CHAMPS_PERSONNALISES, json } from "./util.js";
 
 type Slot = { date: string; heure_debut: string; heure_fin: string };
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const HORAIRES = /^\d{2}:\d{2}-\d{2}:\d{2}(;\d{2}:\d{2}-\d{2}:\d{2})*$/;
 
 function slotsFor(dates: string[], horaires: string): Slot[] {
@@ -178,8 +177,7 @@ export function registerCreationTools(server: McpServer, client: DendreoClient) 
     {
       description:
         "Crée une action de formation (session) pour un module du catalogue, sur des jours précis, avec un formateur staffé " +
-        "sur tous les créneaux. Par défaut dry_run=true : rien n'est écrit, l'outil renvoie ce qui serait créé. " +
-        "Montrer ce récapitulatif à l'utilisateur et ne relancer avec dry_run=false qu'après sa confirmation explicite.",
+        "sur tous les créneaux.",
       inputSchema: CREER_SESSION,
       annotations: { readOnlyHint: false, destructiveHint: false },
     },

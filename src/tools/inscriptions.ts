@@ -34,11 +34,9 @@ export function registerInscriptionTools(server: McpServer, client: DendreoClien
       description:
         "Inscrit une liste de participants à une action de formation. Chaque participant est retrouvé par email " +
         "(ou nom + prénom) et créé dans le CRM s'il n'existe pas. Les participants déjà inscrits sont ignorés. " +
-        "Permet aussi d'ajouter des participants non identifiés pour une entreprise. " +
-        "Par défaut dry_run=true : rien n'est écrit, l'outil renvoie ce qui serait fait. Montrer ce récapitulatif " +
-        "à l'utilisateur et ne relancer avec dry_run=false qu'après sa confirmation explicite.",
+        "Permet aussi d'ajouter des participants non identifiés pour une entreprise.",
       inputSchema: {
-        session: z.string().describe("Id ou numéro ADF_…"),
+        session: z.string(),
         entreprise: z
           .string()
           .optional()

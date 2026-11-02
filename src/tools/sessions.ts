@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Query, Row } from "../dendreo/client.js";
 import { findEntreprise, findEtape, findFormateur, findModule, single } from "./resolve.js";
-import { LIMITE, borner, compact, json, monthBounds, today } from "./util.js";
+import { DATE, LIMITE, borner, compact, json, monthBounds, today } from "./util.js";
 
 const FIELDS = [
   "id_action_de_formation",
@@ -19,7 +19,6 @@ const FIELDS = [
   "id_entreprise",
 ].join(",");
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 // La liste (INDEX) ne renvoie pas nb_participants_inscrits : on le lit via un SHOW multiple (?id=1,2,3).
 async function withInscrits(client: DendreoClient, rows: Row[]): Promise<Row[]> {
@@ -72,7 +71,7 @@ export function registerSessionTools(server: McpServer, client: DendreoClient) {
         etape: z.string().optional().describe("Étape de l'ADF, ex. « Réalisation », « Prévisionnelle »"),
         debut_apres: DATE.optional().describe("Début à partir de (AAAA-MM-JJ), par défaut aujourd'hui"),
         debut_avant: DATE.optional().describe("Début au plus tard le (AAAA-MM-JJ)"),
-        mois: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("Mois de début AAAA-MM (remplace debut_apres/debut_avant)"),
+        mois: z.string().regex(/^\d{4}-\d{2}$/, "format attendu AAAA-MM").optional().describe("Mois de début AAAA-MM (remplace debut_apres/debut_avant)"),
         limite: LIMITE,
       },
       annotations: { readOnlyHint: true },

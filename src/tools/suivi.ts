@@ -9,10 +9,9 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { DATE, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id ou numéro ADF_…");
+const SESSION = z.string();
 
 const slotLabel = (c: Row | undefined) => {
   if (!c) return "créneau inconnu";
@@ -42,6 +41,35 @@ async function sessionOuErreur(client: DendreoClient, session: string) {
 }
 
 const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
+
+/** Créneaux passés où le formateur ou des participants présents n'ont pas signé (emargement_count = 0). */
+async function signaturesManquantes(client: DendreoClient, args: { session?: string; du?: string; au?: string }) {
+  const au = args.au ?? today();
+  const du = args.du ?? new Date(Date.parse(`${au}T00:00:00Z`) - 30 * 86400000).toISOString().slice(0, 10);
+  const query: Record<string, string> = { include: "lcfs,lcps" };
+  let titre: string | undefined;
+  if (args.session) {
+    const s = single(await findSession(client, args.session, "id_action_de_formation,numero_complet,intitule"), "Session");
+    if (!("row" in s)) return json(s);
+    query.id_action_de_formation = String(s.row.id_action_de_formation);
+    titre = sessionLabel(s.row);
+  } else {
+    query.started_after = du;
+    query.started_before = `${au} 23:59:59`;
+  }
+  const creneaux = (await client.list("creneaux.php", query)).filter((c) => String(c.date_fin) < `${today()} 23:59:59`);
+  const resultats = creneaux
+    .map((c) => {
+      const lcfs = ((c.lcfs ?? []) as Row[]).filter((l) => String(l.status ?? "1") === "1");
+      const lcps = ((c.lcps ?? []) as Row[]).filter((l) => vrai(l.presence));
+      const formateurs = lcfs.filter((l) => !vrai(l.emargement_count)).length;
+      const participants = lcps.filter((l) => !vrai(l.emargement_count)).length;
+      const d = splitDateTime(c.date_debut);
+      return { session: c.id_action_de_formation, id_creneau: c.id_creneau, date: d.date, heure: d.heure, formateurs_sans_signature: formateurs, participants_sans_signature: participants };
+    })
+    .filter((r) => r.formateurs_sans_signature || r.participants_sans_signature);
+  return json({ session: titre, periode: args.session ? undefined : `${du} → ${au}`, creneaux_a_valider: resultats.length, resultats });
+}
 
 export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
@@ -259,16 +287,19 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
     "emargements_manquants",
     {
       description:
-        "Liste, pour une session ou pour toutes les sessions d'une période, les créneaux passés dont la présence " +
-        "n'est pas renseignée pour certains participants, avec les émargements électroniques encore ouverts.",
+        "Créneaux passés d'une session, ou de toutes les sessions d'une période, dont la présence n'est pas renseignée pour " +
+        "certains participants. `controle=\"signatures\"` : créneaux où le formateur ou des participants présents n'ont pas " +
+        "signé (emargement_count = 0).",
       inputSchema: {
         session: SESSION.optional(),
+        controle: z.enum(["presences", "signatures"]).default("presences"),
         du: DATE.optional().describe("Sans session : début de la période (défaut : 30 jours avant aujourd'hui)"),
         au: DATE.optional().describe("Sans session : fin de la période (défaut : aujourd'hui)"),
       },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
+      if (args.controle === "signatures") return signaturesManquantes(client, args);
       let adfs: Row[];
       if (args.session) {
         const s = await sessionOuErreur(client, args.session);
@@ -309,65 +340,55 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
     },
   );
 
-  server.registerTool(
-    "evaluations_session",
-    {
-      description:
-        "Résultats des participants d'une action de formation : réussite par module, note, appréciation et niveau " +
-        "d'acquisition de chaque compétence (acquis, en cours, non acquis).",
-      inputSchema: { session: SESSION },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const s = await sessionOuErreur(client, args.session);
-      if (!("row" in s)) return json(s);
-      const idAdf = String(s.row.id_action_de_formation);
-      const [evals, lmps] = await Promise.all([
-        client.list("evaluations.php", { id_action_de_formation: idAdf, include: "competences,participant" }),
-        client.list("lmps.php", { id_action_de_formation: idAdf, include: "participant,module" }),
-      ]);
-      const note = (e: Row) => (e.note !== "" && e.note != null ? `${Number(e.note)}/${e.amplitude_notation}` : undefined);
-      const resultats = lmps
-        .filter((m) => vrai(m.inscription ?? 1))
-        .map((m) => {
-          const siennes = evals.filter((e) => String(e.id_lmp) === String(m.id_lmp));
-          const valide = m.validated ?? siennes.find((e) => e.validated !== "")?.validated;
-          return {
-            participant: nomDe(m.participant) ?? `participant ${m.id_participant}`,
-            module: ((m.module ?? {}) as Row).intitule ?? m.id_module,
-            reussite: valide === "" || valide == null ? "non évalué" : vrai(valide) ? "validé" : "non validé",
-            evaluations: siennes.map((e) => ({
-              nom: e.evaluation_name || undefined,
-              note: note(e),
-              appreciation: e.appreciation || undefined,
-              competences: ((e.competences ?? []) as Row[]).map((c) => {
-                const ev = (c.evaluation ?? {}) as Row;
-                return { competence: c.label, statut: ev.status || "non évaluée", note: note(ev) };
-              }),
-            })),
-          };
-        });
-      const evalues = resultats.filter((r) => r.reussite !== "non évalué");
-      return json({
-        session: sessionLabel(s.row),
-        taux_reussite: evalues.length
-          ? `${Math.round((evalues.filter((r) => r.reussite === "validé").length / evalues.length) * 100)} %`
-          : undefined,
-        resultats,
+  const lireEvaluations = async (args: { session: string }) => {
+    const s = await sessionOuErreur(client, args.session);
+    if (!("row" in s)) return json(s);
+    const idAdf = String(s.row.id_action_de_formation);
+    const [evals, lmps] = await Promise.all([
+      client.list("evaluations.php", { id_action_de_formation: idAdf, include: "competences,participant" }),
+      client.list("lmps.php", { id_action_de_formation: idAdf, include: "participant,module" }),
+    ]);
+    const note = (e: Row) => (e.note !== "" && e.note != null ? `${Number(e.note)}/${e.amplitude_notation}` : undefined);
+    const resultats = lmps
+      .filter((m) => vrai(m.inscription ?? 1))
+      .map((m) => {
+        const siennes = evals.filter((e) => String(e.id_lmp) === String(m.id_lmp));
+        const valide = m.validated ?? siennes.find((e) => e.validated !== "")?.validated;
+        return {
+          participant: nomDe(m.participant) ?? `participant ${m.id_participant}`,
+          module: ((m.module ?? {}) as Row).intitule ?? m.id_module,
+          reussite: valide === "" || valide == null ? "non évalué" : vrai(valide) ? "validé" : "non validé",
+          evaluations: siennes.map((e) => ({
+            nom: e.evaluation_name || undefined,
+            note: note(e),
+            appreciation: e.appreciation || undefined,
+            competences: ((e.competences ?? []) as Row[]).map((c) => {
+              const ev = (c.evaluation ?? {}) as Row;
+              return { competence: c.label, statut: ev.status || "non évaluée", note: note(ev) };
+            }),
+          })),
+        };
       });
-    },
-  );
+    const evalues = resultats.filter((r) => r.reussite !== "non évalué");
+    return json({
+      session: sessionLabel(s.row),
+      taux_reussite: evalues.length
+        ? `${Math.round((evalues.filter((r) => r.reussite === "validé").length / evalues.length) * 100)} %`
+        : undefined,
+      resultats,
+    });
+  };
 
   server.registerTool(
-    "evaluer_participant",
+    "evaluations",
     {
       description:
-        "Enregistre l'évaluation d'un participant sur un module d'une session (réussite, note, appréciation) ou sur une " +
-        "compétence (acquis, en cours, non acquis). Par défaut dry_run=true : rien n'est écrit. " +
-        "Ne relancer avec dry_run=false qu'après confirmation explicite.",
+        "Sans `participant` : résultats d'une session (réussite par module, note, appréciation, compétences acquis / en cours / " +
+        "non acquis). Avec `participant` : enregistre son évaluation sur un module (valide, note, appreciation) ou sur une " +
+        "compétence (id_competence + statut_competence).",
       inputSchema: {
         session: SESSION,
-        participant: z.string().describe("Prénom et nom, email ou id du participant"),
+        participant: z.string().optional().describe("Prénom et nom, email ou id : passe en écriture"),
         module: z.string().optional().describe("Module évalué (intitulé ou id) si la session en a plusieurs"),
         valide: z.boolean().optional().describe("Réussite du participant au module"),
         note: z.number().optional(),
@@ -381,6 +402,10 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
     async (args) => {
+      if (!args.participant) return lireEvaluations(args);
+      if ([args.valide, args.note, args.appreciation, args.statut_competence].every((v) => v === undefined)) {
+        return json({ erreur: "Rien à enregistrer : préciser valide, note, appreciation ou statut_competence." });
+      }
       const s = await sessionOuErreur(client, args.session);
       if (!("row" in s)) return json(s);
       const idAdf = String(s.row.id_action_de_formation);
