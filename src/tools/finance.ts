@@ -4,10 +4,10 @@ import type { DendreoClient, Query, Row } from "../dendreo/client.js";
 import { appliquer, champs } from "./ecriture.js";
 import { fichierResultat } from "./exports.js";
 import { findEntreprise, findSession, single } from "./resolve.js";
-import { addDays, arrondi, dateRenseignee, json, normalize, num, today } from "./util.js";
+import { LIMITE, addDays, arrondi, borner, compact, dateRenseignee, json, normalize, num, today } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
+const SESSION = z.string().describe("Id ou numéro ADF_…");
 
 const FORMATS_COMPTA = [
   "ebp", "ebp_v2", "ebp_v3", "ebp_aux", "ebp_aux_txt", "generique", "generique_txt", "sage_pnm", "sage_50", "sage_x3",
@@ -18,8 +18,8 @@ const MOYENS = ["virement", "cheque", "prelevement", "cb", "paypal", "especes", 
 
 const restantDu = (f: Row) => arrondi(num(f.montant_total_ttc) - num(f.montant_paiements));
 
-export function resumeFacture(f: Row) {
-  return {
+export function resumeFacture(f: Row, avecLien = false) {
+  return compact({
     id_facture: f.id_facture,
     numero: f.numero_complet,
     emission: String(f.date_emission).slice(0, 10),
@@ -33,8 +33,8 @@ export function resumeFacture(f: Row) {
     restant_du: restantDu(f),
     statut: f.statut_facturation,
     niveau_relance: String(f.id_niveau_relance) !== "0" ? f.id_niveau_relance : undefined,
-    lien_pdf: f.public_url || undefined,
-  };
+    lien_pdf: avecLien ? f.public_url || undefined : undefined,
+  });
 }
 
 async function findFinanceur(client: DendreoClient, financeur: string): Promise<Row[]> {
@@ -48,7 +48,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "factures",
     {
-      title: "Factures émises",
       description:
         "Factures par session, entreprise, financeur ou période d'émission : montants, payé, restant dû, échéance, statut, " +
         "niveau de relance et lien PDF. `detail=true` ajoute les financements et règlements de chaque facture.",
@@ -61,6 +60,8 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         emission_avant: DATE.optional(),
         impayees_seulement: z.boolean().default(false),
         detail: z.boolean().default(false),
+        liens: z.boolean().default(false).describe("Inclure le lien PDF public"),
+        limite: LIMITE,
       },
       annotations: { readOnlyHint: true },
     },
@@ -84,14 +85,16 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
       }
       let rows = await client.list("factures.php", query);
       if (args.impayees_seulement) rows = rows.filter((f) => restantDu(f) > 0.005);
-      const factures = rows.map((f) => ({
-        ...resumeFacture(f),
+      const toutes = rows.map((f) => ({
+        ...resumeFacture(f, args.liens),
         ...(args.detail ? { financements: f.financements, reglements: f.reglements } : {}),
       }));
+      const { items: factures, ...reste } = borner(toutes, args.limite);
       return json({
-        nombre: factures.length,
-        total_ttc: arrondi(factures.reduce((a, f) => a + f.total_ttc, 0)),
-        restant_du: arrondi(factures.reduce((a, f) => a + f.restant_du, 0)),
+        nombre: toutes.length,
+        total_ttc: arrondi(toutes.reduce((a, f) => a + (f.total_ttc ?? 0), 0)),
+        restant_du: arrondi(toutes.reduce((a, f) => a + (f.restant_du ?? 0), 0)),
+        ...(reste.avertissement ? { avertissement: reste.avertissement } : {}),
         factures,
       });
     },
@@ -100,13 +103,13 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "impayes",
     {
-      title: "Factures impayées",
       description:
         "Factures échues non soldées (échéance dépassée et restant dû > 0), groupées par client ou financeur, avec le " +
         "retard en jours et le niveau de relance déjà atteint.",
       inputSchema: {
         depuis: DATE.optional().describe("Factures émises à partir de cette date (défaut : 12 mois avant aujourd'hui)"),
         retard_min_jours: z.number().int().min(0).default(0).describe("Ne garder que les factures échues depuis au moins N jours"),
+        limite: LIMITE.describe("Nb max de clients/financeurs détaillés (défaut 50)"),
       },
       annotations: { readOnlyHint: true },
     },
@@ -127,14 +130,14 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         groupes.set(cle, g);
       }
       const liste = [...groupes.values()].sort((a, b) => b.total - a.total);
-      return json({ total_impaye: arrondi(liste.reduce((a, g) => a + g.total, 0)), nb_clients: liste.length, clients: liste });
+      const { items: clients, avertissement } = borner(liste, args.limite);
+      return json({ total_impaye: arrondi(liste.reduce((a, g) => a + g.total, 0)), nb_clients: liste.length, ...(avertissement ? { avertissement } : {}), clients });
     },
   );
 
   server.registerTool(
     "reglements",
     {
-      title: "Règlements",
       description:
         "Liste les règlements (par facture ou période), ou en saisit, modifie ou supprime un. Seuls les règlements non exportés en " +
         "comptabilité sont modifiables ou supprimables. Écritures en dry_run=true par défaut : ne relancer avec dry_run=false " +
@@ -151,6 +154,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         reference: z.string().optional(),
         commentaire: z.string().optional(),
         num_dossier_cpf: z.string().optional().describe("Rattache automatiquement le règlement à l'OPCO CPF"),
+        limite: LIMITE,
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: true },
@@ -167,17 +171,18 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
       }
       if (args.action === "lister") {
         const rows = await client.list("reglements.php", { facture_id: idFacture, date_after: args.du, date_before: args.au });
-        const reglements = rows.map((r) => ({
+        const tous = rows.map((r) => ({
           id: r.id, facture: r.facture_id, date: String(r.date).slice(0, 10), montant: num(r.amount), moyen: r.method || undefined,
           reference: r.reference || undefined, exporte: dateRenseignee(r.exported_at),
         }));
-        return json({ nombre: reglements.length, total: arrondi(reglements.reduce((a, r) => a + r.montant, 0)), reglements });
+        const { items: reglements, avertissement } = borner(tous, args.limite);
+        return json({ nombre: tous.length, total: arrondi(tous.reduce((a, r) => a + r.montant, 0)), ...(avertissement ? { avertissement } : {}), reglements });
       }
       if (args.action === "supprimer") {
         if (!args.id_reglement) return json({ erreur: "id_reglement requis." });
         const [r] = await client.list("reglements.php", { id: args.id_reglement });
         if (!r) return json({ erreur: "Règlement introuvable." });
-        if (dateRenseignee(r.exported_at)) return json({ erreur: "Règlement déjà exporté en comptabilité : suppression impossible.", reglement: r });
+        if (dateRenseignee(r.exported_at)) return json({ erreur: "Règlement déjà exporté en comptabilité : suppression impossible.", reglement: { id: r.id, facture: r.facture_id, montant: r.amount, date: r.date } });
         return appliquer(args.dry_run, { action: "suppression", reglement: { id: r.id, facture: r.facture_id, montant: r.amount, date: r.date } }, () =>
           client.delete("reglements.php", { id: args.id_reglement! }),
         );
@@ -193,7 +198,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         const [r] = await client.list("reglements.php", { id: args.id_reglement });
         if (!r) return json({ erreur: "Règlement introuvable." });
         if (dateRenseignee(r.exported_at)) return json({ erreur: "Règlement déjà exporté en comptabilité : modification impossible." });
-        return appliquer(args.dry_run, { action: "modification", avant: r, valeurs: body }, () => client.post("reglements.php", body));
+        return appliquer(args.dry_run, { action: "modification", avant: { montant: r.amount, date: r.date, moyen: r.method, reference: r.reference, commentaire: r.comment }, valeurs: body }, () => client.post("reglements.php", body));
       }
       return appliquer(args.dry_run, { action: "creation", valeurs: body }, () => client.post("reglements.php", body));
     },
@@ -202,7 +207,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "financements",
     {
-      title: "Financements d'une session",
       description:
         "Qui finance quoi : financements d'une session, d'une entreprise ou d'un financeur (OPCO, entreprise, CPF), avec " +
         "montants financé / facturé / payé et participants concernés. Peut supprimer un financement (dry_run=true par défaut) ; " +
@@ -212,6 +216,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         entreprise: z.string().optional(),
         financeur: z.string().optional().describe("Raison sociale ou id d'un financeur externe"),
         supprimer: z.string().optional().describe("id_financement à supprimer"),
+        limite: LIMITE,
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: true },
@@ -220,7 +225,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
       if (args.supprimer) {
         const [f] = await client.list("financements.php", { id: args.supprimer });
         if (!f) return json({ erreur: "Financement introuvable." });
-        return appliquer(args.dry_run, { action: "suppression", financement: f }, () => client.delete("financements.php", { id_financement: args.supprimer! }));
+        return appliquer(args.dry_run, { action: "suppression", financement: { id: f.id_financement, id_action_de_formation: f.id_action_de_formation, type: f.type, montant_total_finance: f.montant_total_finance } }, () => client.delete("financements.php", { id_financement: args.supprimer! }));
       }
       const query: Query = { include: "lfps,financeur,entreprise" };
       if (args.session) {
@@ -243,7 +248,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         return json({ erreur: "Préciser une session, une entreprise ou un financeur." });
       }
       const rows = await client.list("financements.php", query);
-      const financements = rows.map((f) => ({
+      const tous = rows.map((f) => ({
         id_financement: f.id_financement,
         id_action_de_formation: f.id_action_de_formation,
         type: f.type,
@@ -257,11 +262,13 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
           return [p.prenom, p.nom].filter(Boolean).join(" ") || `lap ${l.id_lap}`;
         }),
       }));
+      const { items: financements, avertissement } = borner(tous, args.limite);
       return json({
-        nombre: financements.length,
-        finance: arrondi(financements.reduce((a, f) => a + f.finance, 0)),
-        facture: arrondi(financements.reduce((a, f) => a + f.facture, 0)),
-        paye: arrondi(financements.reduce((a, f) => a + f.paye, 0)),
+        nombre: tous.length,
+        finance: arrondi(tous.reduce((a, f) => a + f.finance, 0)),
+        facture: arrondi(tous.reduce((a, f) => a + f.facture, 0)),
+        paye: arrondi(tous.reduce((a, f) => a + f.paye, 0)),
+        ...(avertissement ? { avertissement } : {}),
         financements,
       });
     },
@@ -270,7 +277,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "financeurs",
     {
-      title: "Financeurs externes",
       description: "Recherche un financeur (OPCO, financeur public) et renvoie sa fiche, ses factures et ses contacts rattachés.",
       inputSchema: { financeur: z.string().optional().describe("Raison sociale ou id ; vide = liste de tous les financeurs") },
       annotations: { readOnlyHint: true },
@@ -287,14 +293,13 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         client.list("factures.php", { id_opca: id }),
         client.list("contacts.php", { id_opca: id, fields: "id_contact,prenom,nom,email,fonction" }),
       ]);
-      return json({ financeur: f.row, factures: factures.map(resumeFacture), restant_du: arrondi(factures.reduce((a, x) => a + restantDu(x), 0)), contacts });
+      return json({ financeur: compact({ id_opca: f.row.id_opca, raison_sociale: f.row.raison_sociale, ville: f.row.ville, email: f.row.email, telephone: f.row.telephone }), factures: factures.slice(0, 50).map((x) => resumeFacture(x)), nb_factures: factures.length, restant_du: arrondi(factures.reduce((a, x) => a + restantDu(x), 0)), contacts });
     },
   );
 
   server.registerTool(
     "bilan_financier_session",
     {
-      title: "Bilan financier d'une session",
       description:
         "CA prévu (prix des inscriptions) comparé au financé, au facturé et à l'encaissé pour une session, avec les écarts " +
         "(reste à facturer, reste à encaisser) et l'alerte « session non facturée ».",
@@ -327,7 +332,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
         encaisse: arrondi(paye),
         reste_a_facturer: arrondi(prevu - facture),
         reste_a_encaisser: arrondi(factures.reduce((a, f) => a + restantDu(f), 0)),
-        factures: factures.map(resumeFacture),
+        factures: factures.map((x) => resumeFacture(x)),
         ...(alertes.length ? { alertes } : {}),
       });
     },
@@ -336,7 +341,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "export_comptable",
     {
-      title: "Export comptable des ventes",
       description:
         "Génère le fichier d'export comptable du journal des ventes (Sage, EBP, Cegid, Quadra…) pour une liste de factures " +
         "(numéros FA_… ou ids) ou un lot, et renvoie le fichier.",

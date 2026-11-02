@@ -7,9 +7,10 @@ import { arrondi, heuresCreneau, json, lots, num, today } from "./util.js";
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** Au-delà, un export CSV est renvoyé en pièce jointe plutôt qu'en texte. */
-const MAX_TEXTE = 100_000;
+const MAX_TEXTE = 20_000;
 
-export const SLUGS_EXPORT = [
+/** Slugs connus, renvoyés uniquement quand l'export demandé échoue (évite ~600 tokens par conversation). */
+const SLUGS_EXPORT = [
   "Activité : actions-de-formation, actions-de-formation-date-fin, creneaux, creneaux-participants (présents uniquement, ADF confirmées), creneaux-participants-all (tous), conflits, events, occupation-salles, a-d-f-et-salles-par-jour",
   "Modules / participants : modules, modules-adfs, modules-participants, participants-adfs, participants-formes, participants-formes-par-module, participants-par-module, participants-uniques-par-annee, participants-par-ajout, participants-avec-entreprise, newsletter",
   "Formateurs : creneaux-formateurs, interventions-formateurs, modules-realises-par-les-formateurs, notes-de-frais",
@@ -22,12 +23,25 @@ export const SLUGS_EXPORT = [
 /** Renvoie un fichier téléchargé : texte pour un petit CSV, pièce jointe sinon. */
 export function fichierResultat(doc: { contenu: Buffer; type: string; nom?: string }, nom: string, resume: Record<string, unknown>): CallToolResult {
   const texte = doc.type.includes("csv") || doc.type.startsWith("text/");
-  if (texte && doc.contenu.length <= MAX_TEXTE) {
-    return { content: [{ type: "text", text: JSON.stringify({ ...resume, fichier: nom }, null, 2) }, { type: "text", text: doc.contenu.toString("utf8") }] };
+  if (texte) {
+    const complet = doc.contenu.toString("utf8");
+    if (doc.contenu.length <= MAX_TEXTE) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...resume, fichier: nom }) }, { type: "text", text: complet }] };
+    }
+    // CSV volumineux : on n'envoie que les premières lignes (le fichier complet reste téléchargeable en xlsx).
+    const lignes = complet.split("\n");
+    let garde = 0, taille = 0;
+    while (garde < lignes.length && taille + lignes[garde].length + 1 <= MAX_TEXTE) taille += lignes[garde++].length + 1;
+    return {
+      content: [
+        { type: "text", text: JSON.stringify({ ...resume, fichier: nom, lignes_total: lignes.length - 1, lignes_affichees: Math.max(garde - 1, 0), tronque: true, taille_ko: Math.round(doc.contenu.length / 1024) }) },
+        { type: "text", text: lignes.slice(0, garde).join("\n") },
+      ],
+    };
   }
   return {
     content: [
-      { type: "text", text: JSON.stringify({ ...resume, fichier: nom, taille_ko: Math.round(doc.contenu.length / 1024) }, null, 2) },
+      { type: "text", text: JSON.stringify({ ...resume, fichier: nom, taille_ko: Math.round(doc.contenu.length / 1024) }) },
       { type: "resource", resource: { uri: `dendreo://exports/${encodeURIComponent(nom)}`, mimeType: doc.type, blob: doc.contenu.toString("base64") } },
     ],
   };
@@ -89,11 +103,9 @@ export function registerExportTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "telecharger_export",
     {
-      title: "Télécharger un export Dendreo",
       description:
         "Télécharge n'importe quel export du menu Reporting de Dendreo sur une période (`nom_export` = slug de l'export) " +
-        "et renvoie le fichier (CSV en texte s'il est court, sinon pièce jointe). Slugs disponibles : " +
-        SLUGS_EXPORT,
+        "et renvoie le fichier (CSV en texte s'il est court, sinon pièce jointe). Slug inconnu : la liste des slugs est renvoyée.",
       inputSchema: {
         nom_export: z.string().describe("Slug de l'export, ex. creneaux, ca-facture-par-mois, bpf-participants"),
         date_debut: DATE,
@@ -104,13 +116,18 @@ export function registerExportTools(server: McpServer, client: DendreoClient) {
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const doc = await client.download("exports.php", {
-        nom_export: args.nom_export,
-        date_debut: args.date_debut,
-        date_fin: args.date_fin,
-        type: args.type,
-        delimiter: args.type === "csv" ? args.delimiter : undefined,
-      });
+      let doc;
+      try {
+        doc = await client.download("exports.php", {
+          nom_export: args.nom_export,
+          date_debut: args.date_debut,
+          date_fin: args.date_fin,
+          type: args.type,
+          delimiter: args.type === "csv" ? args.delimiter : undefined,
+        });
+      } catch (e) {
+        throw new Error(`${e instanceof Error ? e.message : String(e)}. Slugs disponibles : ${SLUGS_EXPORT}`);
+      }
       const nom = doc.nom ?? `${args.nom_export}_${args.date_debut}_${args.date_fin}.${args.type}`;
       return fichierResultat(doc, nom, { export: args.nom_export, periode: `${args.date_debut} → ${args.date_fin}` });
     },
@@ -119,7 +136,6 @@ export function registerExportTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "indicateurs_activite",
     {
-      title: "Indicateurs d'activité",
       description:
         "Synthèse d'activité sur une période : sessions, stagiaires inscrits, heures de formation et heures-stagiaires " +
         "(estimées : inscrits × durée des créneaux de la période), taux de remplissage, CA facturé HT par mois. " +
@@ -156,7 +172,6 @@ export function registerExportTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "pilotage_adf",
     {
-      title: "Pilotage du portefeuille de sessions",
       description:
         "Récapitulatif des sessions d'une période, groupées par étape et type (INTER / INTRA) : nombre de sessions, inscrits, " +
         "heures, montants financé / facturé / payé (d'après les financements). Le détail par session est renvoyé avec `detail=true`.",

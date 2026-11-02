@@ -176,7 +176,6 @@ export function registerCreationTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "creer_session",
     {
-      title: "Créer une session de formation",
       description:
         "Crée une action de formation (session) pour un module du catalogue, sur des jours précis, avec un formateur staffé " +
         "sur tous les créneaux. Par défaut dry_run=true : rien n'est écrit, l'outil renvoie ce qui serait créé. " +

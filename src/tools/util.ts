@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export function json(data: unknown): CallToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  return { content: [{ type: "text", text: JSON.stringify(data) }] };
 }
 
 /** Date du jour au format AAAA-MM-JJ, fuseau Europe/Paris. */
@@ -80,3 +80,20 @@ export function heuresCreneau(c: Record<string, unknown>): number {
 
 /** Date Dendreo renseignée (ni vide ni « 0000-00-00 »). */
 export const dateRenseignee = (v: unknown): boolean => !!v && !String(v).startsWith("0000");
+
+/** Paramètre `limite` commun aux outils de liste. */
+export const LIMITE = z.number().int().min(1).max(500).optional().describe("Nb max de lignes (défaut 50)");
+
+/**
+ * Borne une liste pour limiter la taille de la réponse : renvoie `items` (tronqué) et,
+ * si la liste a été coupée, `total` et un avertissement.
+ */
+export function borner<T>(items: T[], limite = 50): { items: T[]; total?: number; avertissement?: string } {
+  if (items.length <= limite) return { items };
+  return { items: items.slice(0, limite), total: items.length, avertissement: `${items.length - limite} lignes non affichées : affiner les filtres ou augmenter \`limite\`.` };
+}
+
+/** Retire les valeurs vides (undefined, null, chaîne vide) d'un objet pour alléger le JSON. */
+export function compact<T extends Record<string, unknown>>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== "")) as Partial<T>;
+}

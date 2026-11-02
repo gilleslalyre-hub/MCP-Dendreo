@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
 import { findEntreprise, findEtape, findFormateur, findModule, findSalle, findSession, single } from "./resolve.js";
-import { json, splitDateTime, today } from "./util.js";
+import { LIMITE, borner, json, splitDateTime, today } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const nomDe = (p: unknown) => {
@@ -27,7 +27,6 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "detail_session",
     {
-      title: "Détail d'une session",
       description:
         "Fiche complète d'une action de formation : informations générales, remplissage, modules programmés, " +
         "créneaux (dates, heures, formateurs), formateurs staffés et participants inscrits.",
@@ -88,54 +87,8 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
   );
 
   server.registerTool(
-    "planning_formateur",
-    {
-      title: "Planning d'un formateur",
-      description:
-        "Liste les créneaux d'un formateur sur une période (par défaut les 30 prochains jours), avec la session concernée. " +
-        "Utile pour vérifier ses disponibilités avant de le staffer.",
-      inputSchema: {
-        formateur: z.string().describe("Prénom et nom du formateur, ou id"),
-        du: DATE.optional().describe("Début de la période (AAAA-MM-JJ), par défaut aujourd'hui"),
-        au: DATE.optional().describe("Fin de la période (AAAA-MM-JJ), par défaut +30 jours"),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    async ({ formateur, du, au }) => {
-      const r = single(await findFormateur(client, formateur), "Formateur");
-      if (!("row" in r)) return json(r);
-      const debut = du ?? today();
-      const fin = au ?? new Date(Date.parse(`${debut}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
-      const creneaux = await client.list("creneaux.php", {
-        id_formateur: String(r.row.id_formateur),
-        started_after: debut,
-        started_before: `${fin} 23:59:59`,
-      });
-      const adfIds = [...new Set(creneaux.map((c) => String(c.id_action_de_formation)))];
-      const adfs = adfIds.length
-        ? await client.list("actions_de_formation.php", {
-            id: adfIds.join(","),
-            fields: "id_action_de_formation,numero_complet,intitule",
-          })
-        : [];
-      const byId = new Map(adfs.map((a) => [String(a.id_action_de_formation), a]));
-      return json({
-        formateur: `${r.row.prenom} ${r.row.nom}`,
-        periode: { du: debut, au: fin },
-        creneaux: creneaux
-          .map((c) => {
-            const a = byId.get(String(c.id_action_de_formation));
-            return { ...creneau(c), session: a ? `${a.numero_complet} — ${a.intitule}` : c.id_action_de_formation };
-          })
-          .sort((a, b) => `${a.date}${a.debut}`.localeCompare(`${b.date}${b.debut}`)),
-      });
-    },
-  );
-
-  server.registerTool(
     "rechercher_participant",
     {
-      title: "Rechercher un participant",
       description:
         "Recherche des participants par email, nom ou date de naissance, et affiche leurs formations " +
         "(sessions auxquelles ils sont inscrits).",
@@ -184,24 +137,28 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "catalogue",
     {
-      title: "Consulter le catalogue et les référentiels",
       description:
         "Consulte les référentiels Dendreo : modules de formation (durée, prix, formateurs aptes), formateurs, " +
         "entreprises, salles et étapes des actions de formation.",
       inputSchema: {
         objet: z.enum(["modules", "formateurs", "entreprises", "salles", "etapes"]),
         recherche: z.string().optional().describe("Filtre : intitulé, nom, raison sociale…"),
+        limite: LIMITE,
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ objet, recherche }) => {
+    async ({ objet, recherche, limite }) => {
+      const liste = (rows: Row[]) => {
+        const { items, total, avertissement } = borner(rows, limite);
+        return json(total ? { nombre: total, avertissement, resultats: items } : items);
+      };
       switch (objet) {
         case "modules": {
           const rows = recherche
             ? await findModule(client, recherche)
             : await client.list("modules.php", { fields: "id_module,intitule,numero_complet" });
           if (rows.length === 0 || rows.length > 20) {
-            return json({ nombre: rows.length, modules: rows.slice(0, 50) });
+            return liste(rows);
           }
           const details = await client.list("modules.php", {
             id: rows.map((r) => r.id_module).join(","),
@@ -224,7 +181,7 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
           );
         }
         case "formateurs":
-          return json(
+          return liste(
             recherche
               ? await findFormateur(client, recherche)
               : await client.list("formateurs.php", { fields: "id_formateur,nom,prenom,email_pro" }),
@@ -236,13 +193,13 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
               : { erreur: "Préciser une recherche (raison sociale, numéro ENT_…)." },
           );
         case "salles":
-          return json(
+          return liste(
             recherche
               ? await findSalle(client, recherche)
               : await client.list("salles_de_formation.php", { fields: "id_salle_de_formation,intitule,ville" }),
           );
         case "etapes":
-          return json(recherche ? await findEtape(client, recherche) : await client.list("etapes.php"));
+          return liste(recherche ? await findEtape(client, recherche) : await client.list("etapes.php"));
       }
     },
   );

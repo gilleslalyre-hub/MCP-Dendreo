@@ -63,7 +63,7 @@ export class DendreoClient {
     const type = res.headers.get("content-type") ?? "application/octet-stream";
     // Dendreo renvoie une erreur JSON (statut 200 ou non) si le document ne peut pas être généré.
     if (type.includes("json")) {
-      throw new DendreoError(`Dendreo GET ${endpoint} : ${contenu.toString("utf8").slice(0, 500)}`, res.status);
+      throw new DendreoError(`Dendreo GET ${endpoint} : ${corpsCourt(contenu.toString("utf8"))}`, res.status);
     }
     const nom = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(res.headers.get("content-disposition") ?? "")?.[1];
     return { contenu, type, nom: nom ? decodeURIComponent(nom) : undefined };
@@ -84,7 +84,7 @@ export class DendreoClient {
     const res = await fetch(url, { method, headers, body: isForm ? body : body ? JSON.stringify(body) : undefined });
     if (!res.ok) {
       const text = await res.text();
-      throw new DendreoError(`Dendreo ${method} ${endpoint} → ${res.status} : ${text.slice(0, 500)}`, res.status);
+      throw new DendreoError(`Dendreo ${method} ${endpoint} → ${res.status} : ${corpsCourt(text)}`, res.status);
     }
     return res;
   }
@@ -95,7 +95,13 @@ export class DendreoClient {
     try {
       return JSON.parse(text);
     } catch {
-      throw new DendreoError(`Réponse non JSON de ${endpoint} : ${text.slice(0, 200)}`);
+      throw new DendreoError(`Réponse non JSON de ${endpoint} : ${corpsCourt(text, 150)}`);
     }
   }
+}
+
+/** Corps d'erreur condensé : balises HTML retirées, espaces compactés, tronqué (économie de tokens). */
+function corpsCourt(texte: string, max = 200): string {
+  const brut = texte.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return brut.length > max ? `${brut.slice(0, max)}…` : brut;
 }

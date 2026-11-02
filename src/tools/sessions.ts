@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Query, Row } from "../dendreo/client.js";
 import { findEntreprise, findEtape, findFormateur, findModule, single } from "./resolve.js";
-import { json, monthBounds, today } from "./util.js";
+import { LIMITE, borner, compact, json, monthBounds, today } from "./util.js";
 
 const FIELDS = [
   "id_action_de_formation",
@@ -38,7 +38,8 @@ function summarize(rows: Row[]) {
     .map((r) => {
       const inscrits = r.nb_participants_inscrits ?? r.total_participants;
       const min = Number(r.nb_participants_min ?? 0);
-      return {
+      const attente = Number(r.nb_participants_en_attente ?? 0);
+      return compact({
         id: r.id_action_de_formation,
         numero: r.numero_complet,
         intitule: r.intitule,
@@ -46,66 +47,22 @@ function summarize(rows: Row[]) {
         date_debut: r.date_debut,
         date_fin: r.date_fin,
         inscrits,
-        en_attente: r.nb_participants_en_attente,
-        places_min: r.nb_participants_min,
-        places_max: r.nb_participants_max,
-        sous_minimum: min > 0 && Number(inscrits ?? 0) < min,
-      };
+        en_attente: attente > 0 ? attente : undefined,
+        places_max: Number(r.nb_participants_max ?? 0) > 0 ? r.nb_participants_max : undefined,
+        sous_minimum: min > 0 && Number(inscrits ?? 0) < min ? true : undefined,
+      });
     })
     .sort((a, b) => String(a.date_debut).localeCompare(String(b.date_debut)));
 }
 
-async function listSessions(client: DendreoClient, query: Query) {
-  const rows = await client.list("actions_de_formation.php", { ...query, fields: FIELDS });
-  return summarize(await withInscrits(client, rows));
-}
-
 export function registerSessionTools(server: McpServer, client: DendreoClient) {
-  server.registerTool(
-    "lister_sessions_a_venir",
-    {
-      title: "Lister les sessions à venir",
-      description:
-        "Liste les actions de formation (sessions) qui commencent à partir d'aujourd'hui, triées par date, " +
-        "avec le nombre de participants inscrits, le nombre de places et une alerte si la session est sous le minimum.",
-      inputSchema: {
-        jusqu_au: DATE.optional().describe("Date limite de début (AAAA-MM-JJ), optionnelle"),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    async ({ jusqu_au }) => json(await listSessions(client, { started_after: today(), started_before: jusqu_au })),
-  );
-
-  server.registerTool(
-    "formations_du_mois",
-    {
-      title: "Formations qui commencent dans le mois",
-      description:
-        "Liste les actions de formation dont la date de début tombe dans le mois demandé (mois courant par défaut).",
-      inputSchema: {
-        mois: z
-          .string()
-          .regex(/^\d{4}-\d{2}$/)
-          .optional()
-          .describe("Mois au format AAAA-MM, par défaut le mois courant"),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    async ({ mois }) => {
-      const { first, last } = monthBounds(mois ?? today().slice(0, 7));
-      const sessions = await listSessions(client, { started_after: first, started_before: `${last} 23:59:59` });
-      return json({ mois: first.slice(0, 7), sessions });
-    },
-  );
-
   server.registerTool(
     "rechercher_sessions",
     {
-      title: "Rechercher des sessions",
       description:
         "Recherche des actions de formation par formation (module), formateur, entreprise cliente, type, étape, " +
-        "texte libre (intitulé ou numéro) et période de début. Sans période, cherche les sessions à partir d'aujourd'hui. " +
-        "Indique pour chaque session les inscrits et si elle est sous le minimum de participants.",
+        "texte libre (intitulé ou numéro) et période de début. Sans période, cherche les sessions à partir d'aujourd'hui (= sessions à venir). " +
+        "`mois` = sessions commençant dans ce mois. Indique les inscrits et `sous_minimum` si sous le minimum de participants.",
       inputSchema: {
         recherche: z.string().optional().describe("Texte libre sur l'intitulé ou le numéro (ex. ADF_2026)"),
         formation: z.string().optional().describe("Module du catalogue : intitulé, numéro MOD_… ou id"),
@@ -115,15 +72,18 @@ export function registerSessionTools(server: McpServer, client: DendreoClient) {
         etape: z.string().optional().describe("Étape de l'ADF, ex. « Réalisation », « Prévisionnelle »"),
         debut_apres: DATE.optional().describe("Début à partir de (AAAA-MM-JJ), par défaut aujourd'hui"),
         debut_avant: DATE.optional().describe("Début au plus tard le (AAAA-MM-JJ)"),
+        mois: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("Mois de début AAAA-MM (remplace debut_apres/debut_avant)"),
+        limite: LIMITE,
       },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
+      const bornes = args.mois ? monthBounds(args.mois) : undefined;
       const query: Query = {
         search: args.recherche,
         type: args.type,
-        started_after: args.debut_apres ?? today(),
-        started_before: args.debut_avant ? `${args.debut_avant} 23:59:59` : undefined,
+        started_after: bornes?.first ?? args.debut_apres ?? today(),
+        started_before: bornes ? `${bornes.last} 23:59:59` : args.debut_avant ? `${args.debut_avant} 23:59:59` : undefined,
       };
       const filtres: Record<string, unknown> = {};
       if (args.formation) {
@@ -154,8 +114,8 @@ export function registerSessionTools(server: McpServer, client: DendreoClient) {
       let rows = await client.list("actions_de_formation.php", { ...query, fields: FIELDS });
       // L'API ne documente pas de filtre par étape : on filtre ici.
       if (idEtape) rows = rows.filter((r) => String(r.id_etape_process) === idEtape);
-      const sessions = summarize(await withInscrits(client, rows));
-      return json({ filtres, nombre: sessions.length, sessions });
+      const { items: sessions, ...reste } = borner(summarize(await withInscrits(client, rows)), args.limite);
+      return json({ filtres, nombre: reste.total ?? sessions.length, ...reste, sessions });
     },
   );
 }
