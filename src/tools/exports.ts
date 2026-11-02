@@ -7,7 +7,7 @@ import { arrondi, heuresCreneau, json, lots, num, today } from "./util.js";
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** Au-delà, un export CSV est renvoyé en pièce jointe plutôt qu'en texte. */
-const MAX_TEXTE = 100_000;
+const MAX_TEXTE = 20_000;
 
 /** Slugs connus, renvoyés uniquement quand l'export demandé échoue (évite ~600 tokens par conversation). */
 const SLUGS_EXPORT = [
@@ -23,8 +23,21 @@ const SLUGS_EXPORT = [
 /** Renvoie un fichier téléchargé : texte pour un petit CSV, pièce jointe sinon. */
 export function fichierResultat(doc: { contenu: Buffer; type: string; nom?: string }, nom: string, resume: Record<string, unknown>): CallToolResult {
   const texte = doc.type.includes("csv") || doc.type.startsWith("text/");
-  if (texte && doc.contenu.length <= MAX_TEXTE) {
-    return { content: [{ type: "text", text: JSON.stringify({ ...resume, fichier: nom }) }, { type: "text", text: doc.contenu.toString("utf8") }] };
+  if (texte) {
+    const complet = doc.contenu.toString("utf8");
+    if (doc.contenu.length <= MAX_TEXTE) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...resume, fichier: nom }) }, { type: "text", text: complet }] };
+    }
+    // CSV volumineux : on n'envoie que les premières lignes (le fichier complet reste téléchargeable en xlsx).
+    const lignes = complet.split("\n");
+    let garde = 0, taille = 0;
+    while (garde < lignes.length && taille + lignes[garde].length + 1 <= MAX_TEXTE) taille += lignes[garde++].length + 1;
+    return {
+      content: [
+        { type: "text", text: JSON.stringify({ ...resume, fichier: nom, lignes_total: lignes.length - 1, lignes_affichees: Math.max(garde - 1, 0), tronque: true, taille_ko: Math.round(doc.contenu.length / 1024) }) },
+        { type: "text", text: lignes.slice(0, garde).join("\n") },
+      ],
+    };
   }
   return {
     content: [

@@ -10,7 +10,9 @@ const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
 const nomLap = (l: Row) => nomDe(l.participant) ?? `participant ${l.id_participant}`;
 
 /** Au-delà, on renvoie seulement la liste des documents générés, pas leur contenu. */
-const MAX_DOCUMENTS = 20;
+const MAX_DOCUMENTS = 3;
+/** Taille max (Ko) d'un document joint en base64 ; au-delà, seuls son nom et sa taille sont renvoyés. */
+const MAX_KO_JOINT = 300;
 
 /** Résumé d'un email envoyé, avec le statut de chaque destinataire. */
 export function resumeEmail(m: Row) {
@@ -146,7 +148,7 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
           const doc = await client.download("documents.php", d.query);
           const nom = doc.nom ?? `${d.libelle}.${args.format === "pdf" ? "pdf" : "docx"}`;
           journal.push(`${d.libelle} : ${nom} (${Math.round(doc.contenu.length / 1024)} Ko)`);
-          if (i < MAX_DOCUMENTS) {
+          if (i < MAX_DOCUMENTS && doc.contenu.length <= MAX_KO_JOINT * 1024) {
             result.content.push({
               type: "resource",
               resource: { uri: `dendreo://documents/${encodeURIComponent(nom)}`, mimeType: doc.type, blob: doc.contenu.toString("base64") },
@@ -156,7 +158,7 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
           journal.push(`${d.libelle} : erreur : ${(e as Error).message}`);
         }
       }
-      if (demandes.length > MAX_DOCUMENTS) journal.push(`Seuls les ${MAX_DOCUMENTS} premiers documents sont joints.`);
+      if (demandes.length > MAX_DOCUMENTS) journal.push(`Seuls les ${MAX_DOCUMENTS} premiers documents sont joints (et ≤ ${MAX_KO_JOINT} Ko) : relancer par participant pour les autres.`);
       result.content.unshift({ type: "text", text: JSON.stringify({ documents: journal }) });
       return result;
     },
