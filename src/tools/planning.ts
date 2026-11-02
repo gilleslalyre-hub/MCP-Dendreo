@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DendreoError, type DendreoClient, type Row } from "../dendreo/client.js";
+import { retirerFormateur } from "./gestion.js";
 import { findEntreprise, findFormateur, findSalle, findSession, single } from "./resolve.js";
 import { DATE, LIMITE, addDays, borner, heuresCreneau, json, nomDe, splitDateTime, today } from "./util.js";
 
@@ -25,18 +26,24 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
     {
       description:
         "Ajoute un formateur à une action de formation et l'affecte à tous ses créneaux ou à certains jours. " +
-        "Peut remplacer un autre formateur sur ces créneaux (il en est déstaffé).",
+        "Peut remplacer un autre formateur sur ces créneaux (il en est déstaffé). `retirer=true` : déstaffe `formateur` " +
+        "(certains jours, ou tous ses créneaux et la session) ; Dendreo refuse s'il a émargé, est facturé ou a été noté.",
       inputSchema: {
         session: z.string(),
         formateur: z.string().optional().describe("Formateur à staffer : prénom et nom, ou id (ou utiliser entreprise_sous_traitante)"),
         entreprise_sous_traitante: z.string().optional().describe("Entreprise sous-traitante à staffer à la place d'un formateur (raison sociale, ENT_… ou id) : ajoutée à la session, sans créneaux"),
         jours: z.array(DATE).optional().describe("Limiter à ces jours (AAAA-MM-JJ). Par défaut tous les créneaux"),
         remplace: z.string().optional().describe("Formateur à retirer de ces créneaux : prénom et nom, ou id"),
+        retirer: z.boolean().default(false),
         dry_run: z.boolean().default(true),
       },
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async (args) => {
+      if (args.retirer) {
+        if (!args.formateur) return json({ erreur: "Préciser le formateur à retirer." });
+        return retirerFormateur(client, { session: args.session, formateur: args.formateur, jours: args.jours, dry_run: args.dry_run });
+      }
       const s = single(await findSession(client, args.session, "id_action_de_formation,numero_complet,intitule"), "Session");
       if (!("row" in s)) return json(s);
       if (args.entreprise_sous_traitante) {

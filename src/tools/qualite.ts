@@ -4,7 +4,7 @@ import type { DendreoClient, Row } from "../dendreo/client.js";
 import { appliquer } from "./ecriture.js";
 import { findSession, single } from "./resolve.js";
 import { statut } from "./suivi.js";
-import { DATE, json, lots, nomDe, normalize, num, splitDateTime, today, vrai } from "./util.js";
+import { DATE, json, lots, nomDe, normalize, num, today, vrai } from "./util.js";
 
 const SESSION = z.string();
 
@@ -90,30 +90,20 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
     },
   );
 
-  server.registerTool(
-    "controle_statuts_bpf",
-    {
-      description:
-        "Participants dont le statut BPF est « non renseigné », et entreprises dont le nom ressemble à un financeur " +
-        "(France Travail, OPCO, région…) qui devraient être saisies comme financeurs externes plutôt que comme clients.",
-      inputSchema: { limite: z.number().int().min(1).max(500).default(100) },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const [participants, entreprises] = await Promise.all([
-        client.list("participants.php", { fields: "id_participant,prenom,nom,email,statut_bpf,id_entreprise" }),
-        client.list("entreprises.php", { fields: "id_entreprise,raison_sociale,numero_complet" }),
-      ]);
-      const sansStatut = participants.filter((p) => !p.statut_bpf || /non.?renseign/.test(normalize(p.statut_bpf)));
-      const suspectes = entreprises.filter((e) => LIBELLE_FINANCEUR.test(normalize(e.raison_sociale)));
-      return json({
-        participants_sans_statut_bpf: sansStatut.length,
-        participants: sansStatut.slice(0, args.limite).map((p) => ({ id_participant: p.id_participant, nom: nomDe(p), email: p.email || undefined })),
-        entreprises_ressemblant_a_un_financeur: suspectes.slice(0, args.limite).map((e) => ({ id_entreprise: e.id_entreprise, raison_sociale: e.raison_sociale })),
-        conseil: "Un OPCO ou France Travail doit être créé comme financeur externe (cadre BPF correct), pas comme entreprise cliente.",
-      });
-    },
-  );
+  const statutsBpf = async (args: { limite: number }) => {
+    const [participants, entreprises] = await Promise.all([
+      client.list("participants.php", { fields: "id_participant,prenom,nom,email,statut_bpf,id_entreprise" }),
+      client.list("entreprises.php", { fields: "id_entreprise,raison_sociale,numero_complet" }),
+    ]);
+    const sansStatut = participants.filter((p) => !p.statut_bpf || /non.?renseign/.test(normalize(p.statut_bpf)));
+    const suspectes = entreprises.filter((e) => LIBELLE_FINANCEUR.test(normalize(e.raison_sociale)));
+    return json({
+      participants_sans_statut_bpf: sansStatut.length,
+      participants: sansStatut.slice(0, args.limite).map((p) => ({ id_participant: p.id_participant, nom: nomDe(p), email: p.email || undefined })),
+      entreprises_ressemblant_a_un_financeur: suspectes.slice(0, args.limite).map((e) => ({ id_entreprise: e.id_entreprise, raison_sociale: e.raison_sociale })),
+      conseil: "Un OPCO ou France Travail doit être créé comme financeur externe (cadre BPF correct), pas comme entreprise cliente.",
+    });
+  };
 
   server.registerTool(
     "sous_traitance",
@@ -209,11 +199,16 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Détecte les doublons d'entreprises (SIRET, raison sociale), les entreprises sans contact principal ou sans contact " +
-        "de facturation, et les participants sans email.",
-      inputSchema: { limite: z.number().int().min(1).max(500).default(100) },
+        "de facturation, et les participants sans email. `controle=\"statuts_bpf\"` : participants au statut BPF non renseigné " +
+        "et entreprises dont le nom ressemble à un financeur (OPCO, France Travail…) à saisir comme financeur externe.",
+      inputSchema: {
+        controle: z.enum(["crm", "statuts_bpf"]).default("crm"),
+        limite: z.number().int().min(1).max(500).default(100),
+      },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
+      if (args.controle === "statuts_bpf") return statutsBpf(args);
       const [entreprises, contacts, participants] = await Promise.all([
         client.list("entreprises.php", { fields: "id_entreprise,raison_sociale,siret,numero_complet" }),
         client.list("contacts.php"),
@@ -289,47 +284,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
           ...(participants.some((p) => p.emargements_non_signes) ? ["Des présences ne sont pas signées électroniquement (emargement_count = 0)."] : []),
         ],
       });
-    },
-  );
-
-  server.registerTool(
-    "validation_emargements",
-    {
-      description:
-        "Créneaux passés où le formateur ou des participants n'ont pas signé (emargement_count = 0), sur une session ou une période.",
-      inputSchema: {
-        session: SESSION.optional(),
-        du: DATE.optional().describe("Défaut : 30 jours avant aujourd'hui"),
-        au: DATE.optional().describe("Défaut : aujourd'hui"),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const au = args.au ?? today();
-      const du = args.du ?? new Date(Date.parse(`${au}T00:00:00Z`) - 30 * 86400000).toISOString().slice(0, 10);
-      const query: Record<string, string> = { include: "lcfs,lcps" };
-      let titre: string | undefined;
-      if (args.session) {
-        const s = single(await findSession(client, args.session, "id_action_de_formation,numero_complet,intitule"), "Session");
-        if (!("row" in s)) return json(s);
-        query.id_action_de_formation = String(s.row.id_action_de_formation);
-        titre = label(s.row);
-      } else {
-        query.started_after = du;
-        query.started_before = `${au} 23:59:59`;
-      }
-      const creneaux = (await client.list("creneaux.php", query)).filter((c) => String(c.date_fin) < `${today()} 23:59:59`);
-      const resultats = creneaux
-        .map((c) => {
-          const lcfs = ((c.lcfs ?? []) as Row[]).filter((l) => String(l.status ?? "1") === "1");
-          const lcps = ((c.lcps ?? []) as Row[]).filter((l) => vrai(l.presence));
-          const formateurs = lcfs.filter((l) => !vrai(l.emargement_count)).length;
-          const participants = lcps.filter((l) => !vrai(l.emargement_count)).length;
-          const d = splitDateTime(c.date_debut);
-          return { session: c.id_action_de_formation, id_creneau: c.id_creneau, date: d.date, heure: d.heure, formateurs_sans_signature: formateurs, participants_sans_signature: participants };
-        })
-        .filter((r) => r.formateurs_sans_signature || r.participants_sans_signature);
-      return json({ session: titre, periode: args.session ? undefined : `${du} → ${au}`, creneaux_a_valider: resultats.length, resultats });
     },
   );
 }

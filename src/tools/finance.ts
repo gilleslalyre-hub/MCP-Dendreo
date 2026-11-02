@@ -43,14 +43,40 @@ async function findFinanceur(client: DendreoClient, financeur: string): Promise<
   return exact.length ? exact : rows;
 }
 
+/** Factures échues non soldées, groupées par client ou financeur (vue `impayes` de l'outil `factures`). */
+async function impayes(client: DendreoClient, args: { emission_apres?: string; retard_min_jours: number; limite?: number }) {
+  const jour = today();
+  const rows = await client.list("factures.php", { emission_after: args.emission_apres ?? addDays(jour, -365) });
+  const groupes = new Map<string, { client: string; type: string; total: number; factures: unknown[] }>();
+  for (const f of rows) {
+    const restant = restantDu(f);
+    if (restant <= 0.005 || !dateRenseignee(f.date_echeance)) continue;
+    const retard = Math.round((Date.parse(jour) - Date.parse(String(f.date_echeance).slice(0, 10))) / 86400000);
+    if (retard <= 0 || retard < args.retard_min_jours) continue;
+    const financeur = String(f.id_opca) !== "0";
+    const cle = `${financeur ? "financeur" : "client"}:${financeur ? f.id_opca : f.id_entreprise}:${f.raison_sociale}`;
+    const g = groupes.get(cle) ?? { client: String(f.raison_sociale), type: financeur ? "financeur" : "client", total: 0, factures: [] };
+    g.total = arrondi(g.total + restant);
+    g.factures.push({ ...resumeFacture(f), retard_jours: retard });
+    groupes.set(cle, g);
+  }
+  const liste = [...groupes.values()].sort((a, b) => b.total - a.total);
+  const { items: clients, avertissement } = borner(liste, args.limite);
+  return json({ total_impaye: arrondi(liste.reduce((a, g) => a + g.total, 0)), nb_clients: liste.length, ...(avertissement ? { avertissement } : {}), clients });
+}
+
 export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "factures",
     {
       description:
         "Factures par session, entreprise, financeur ou période d'émission : montants, payé, restant dû, échéance, statut, " +
-        "niveau de relance et lien PDF. `detail=true` ajoute les financements et règlements de chaque facture.",
+        "niveau de relance et lien PDF. `detail=true` ajoute les financements et règlements de chaque facture. " +
+        "`vue=\"impayes\"` : factures échues non soldées (émises depuis `emission_apres`, défaut 12 mois), groupées par client " +
+        "ou financeur, avec le retard en jours ; `limite` porte alors sur les clients.",
       inputSchema: {
+        vue: z.enum(["liste", "impayes"]).default("liste"),
+        retard_min_jours: z.number().int().min(0).default(0).describe("Vue impayes : échues depuis au moins N jours"),
         session: SESSION.optional(),
         entreprise: z.string().optional().describe("Raison sociale, ENT_… ou id"),
         financeur: z.string().optional().describe("Raison sociale ou id du financeur (OPCO…)"),
@@ -65,6 +91,7 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
       annotations: { readOnlyHint: true },
     },
     async (args) => {
+      if (args.vue === "impayes") return impayes(client, args);
       const query: Query = { numero_complet: args.numero, emission_after: args.emission_apres, emission_before: args.emission_avant };
       if (args.detail) query.include = "financements,reglements";
       if (args.session) {
@@ -99,40 +126,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
     },
   );
 
-  server.registerTool(
-    "impayes",
-    {
-      description:
-        "Factures échues non soldées (échéance dépassée et restant dû > 0), groupées par client ou financeur, avec le " +
-        "retard en jours et le niveau de relance déjà atteint.",
-      inputSchema: {
-        depuis: DATE.optional().describe("Factures émises à partir de cette date (défaut : 12 mois avant aujourd'hui)"),
-        retard_min_jours: z.number().int().min(0).default(0).describe("Ne garder que les factures échues depuis au moins N jours"),
-        limite: LIMITE.describe("Nb max de clients/financeurs détaillés (défaut 50)"),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const jour = today();
-      const rows = await client.list("factures.php", { emission_after: args.depuis ?? addDays(jour, -365) });
-      const groupes = new Map<string, { client: string; type: string; total: number; factures: unknown[] }>();
-      for (const f of rows) {
-        const restant = restantDu(f);
-        if (restant <= 0.005 || !dateRenseignee(f.date_echeance)) continue;
-        const retard = Math.round((Date.parse(jour) - Date.parse(String(f.date_echeance).slice(0, 10))) / 86400000);
-        if (retard <= 0 || retard < args.retard_min_jours) continue;
-        const financeur = String(f.id_opca) !== "0";
-        const cle = `${financeur ? "financeur" : "client"}:${financeur ? f.id_opca : f.id_entreprise}:${f.raison_sociale}`;
-        const g = groupes.get(cle) ?? { client: String(f.raison_sociale), type: financeur ? "financeur" : "client", total: 0, factures: [] };
-        g.total = arrondi(g.total + restant);
-        g.factures.push({ ...resumeFacture(f), retard_jours: retard });
-        groupes.set(cle, g);
-      }
-      const liste = [...groupes.values()].sort((a, b) => b.total - a.total);
-      const { items: clients, avertissement } = borner(liste, args.limite);
-      return json({ total_impaye: arrondi(liste.reduce((a, g) => a + g.total, 0)), nb_clients: liste.length, ...(avertissement ? { avertissement } : {}), clients });
-    },
-  );
 
   server.registerTool(
     "reglements",

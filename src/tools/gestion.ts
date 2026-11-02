@@ -41,6 +41,63 @@ async function presencesSaisies(client: DendreoClient, idAdf: string, idLap: str
 /** Deux intervalles « AAAA-MM-JJ HH:MM:SS » se chevauchent-ils ? */
 const chevauche = (a: Row, b: Row) => String(a.date_debut) < String(b.date_fin) && String(b.date_debut) < String(a.date_fin);
 
+/**
+ * Déstaffe un formateur d'une session, sur tous ses créneaux (il est alors retiré de la session) ou sur certains jours.
+ * Utilisé par `staffer_formateur` avec `retirer=true`.
+ */
+export async function retirerFormateur(
+  client: DendreoClient,
+  args: { session: string; formateur: string; jours?: string[]; dry_run: boolean },
+) {
+  const s = await sessionOuErreur(client, args.session);
+  if (!("row" in s)) return json(s);
+  const f = single(await findFormateur(client, args.formateur), "Formateur");
+  if (!("row" in f)) return json(f);
+  const idAdf = String(s.row.id_action_de_formation);
+  const idF = String(f.row.id_formateur);
+  const [lafs, lcfs, creneaux] = await Promise.all([
+    client.list("lafs.php", { id_action_de_formation: idAdf }),
+    client.list("lcfs.php", { id_action_de_formation: idAdf }),
+    client.list("creneaux.php", { id_action_de_formation: idAdf }),
+  ]);
+  const laf = lafs.find((l) => String(l.id_formateur) === idF);
+  if (!laf) return json({ erreur: "Ce formateur n'est pas staffé sur cette session." });
+  const creneauById = new Map(creneaux.map((c) => [String(c.id_creneau), c]));
+  const siens = lcfs.filter(
+    (l) => vrai(l.status) && (String(l.id_formateur ?? "") === idF || String(l.id_laf) === String(laf.id_laf)),
+  );
+  const cibles = args.jours
+    ? siens.filter((l) => args.jours!.includes(splitDateTime(creneauById.get(String(l.id_creneau))?.date_debut).date))
+    : siens;
+  const retraitComplet = !args.jours || cibles.length === siens.length;
+  const recap = {
+    session: sessionLabel(s.row),
+    formateur: `${f.row.prenom} ${f.row.nom}`,
+    creneaux_a_destaffer: cibles.map((l) => slotLabel(creneauById.get(String(l.id_creneau)) ?? {})),
+    retire_de_la_session: retraitComplet,
+  };
+  if (args.dry_run) return json({ dry_run: true, ...recap });
+  const journal: string[] = [];
+  for (const l of cibles) {
+    const label = slotLabel(creneauById.get(String(l.id_creneau)) ?? {});
+    try {
+      await client.post("lcfs.php", { id_creneau: l.id_creneau, id_formateur: idF, status: 0 });
+      journal.push(`${label} : déstaffé`);
+    } catch (e) {
+      journal.push(`${label} : ${erreur(e)}`);
+    }
+  }
+  if (retraitComplet) {
+    try {
+      await client.delete("lafs.php", { id_laf: String(laf.id_laf) });
+      journal.push("Formateur retiré de la session");
+    } catch (e) {
+      journal.push(`Retrait de la session : ${erreur(e)}`);
+    }
+  }
+  return json({ ...recap, journal });
+}
+
 export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "modifier_session",
@@ -344,70 +401,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     },
   );
 
-  server.registerTool(
-    "retirer_formateur",
-    {
-      description:
-        "Déstaffe un formateur d'une session, sur tous ses créneaux (il est alors retiré de la session) ou sur certains " +
-        "jours. Dendreo refuse si le formateur a émargé ou est facturé, ou si un participant l'a déjà noté.",
-      inputSchema: {
-        session: SESSION,
-        formateur: z.string().describe("Prénom et nom, ou id"),
-        jours: z.array(DATE).optional().describe("Limiter à ces jours. Par défaut tous les créneaux et la session"),
-        dry_run: z.boolean().default(true),
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true },
-    },
-    async (args) => {
-      const s = await sessionOuErreur(client, args.session);
-      if (!("row" in s)) return json(s);
-      const f = single(await findFormateur(client, args.formateur), "Formateur");
-      if (!("row" in f)) return json(f);
-      const idAdf = String(s.row.id_action_de_formation);
-      const idF = String(f.row.id_formateur);
-      const [lafs, lcfs, creneaux] = await Promise.all([
-        client.list("lafs.php", { id_action_de_formation: idAdf }),
-        client.list("lcfs.php", { id_action_de_formation: idAdf }),
-        client.list("creneaux.php", { id_action_de_formation: idAdf }),
-      ]);
-      const laf = lafs.find((l) => String(l.id_formateur) === idF);
-      if (!laf) return json({ erreur: "Ce formateur n'est pas staffé sur cette session." });
-      const creneauById = new Map(creneaux.map((c) => [String(c.id_creneau), c]));
-      const siens = lcfs.filter(
-        (l) => vrai(l.status) && (String(l.id_formateur ?? "") === idF || String(l.id_laf) === String(laf.id_laf)),
-      );
-      const cibles = args.jours
-        ? siens.filter((l) => args.jours!.includes(splitDateTime(creneauById.get(String(l.id_creneau))?.date_debut).date))
-        : siens;
-      const retraitComplet = !args.jours || cibles.length === siens.length;
-      const recap = {
-        session: sessionLabel(s.row),
-        formateur: `${f.row.prenom} ${f.row.nom}`,
-        creneaux_a_destaffer: cibles.map((l) => slotLabel(creneauById.get(String(l.id_creneau)) ?? {})),
-        retire_de_la_session: retraitComplet,
-      };
-      if (args.dry_run) return json({ dry_run: true, ...recap });
-      const journal: string[] = [];
-      for (const l of cibles) {
-        const label = slotLabel(creneauById.get(String(l.id_creneau)) ?? {});
-        try {
-          await client.post("lcfs.php", { id_creneau: l.id_creneau, id_formateur: idF, status: 0 });
-          journal.push(`${label} : déstaffé`);
-        } catch (e) {
-          journal.push(`${label} : ${erreur(e)}`);
-        }
-      }
-      if (retraitComplet) {
-        try {
-          await client.delete("lafs.php", { id_laf: String(laf.id_laf) });
-          journal.push("Formateur retiré de la session");
-        } catch (e) {
-          journal.push(`Retrait de la session : ${erreur(e)}`);
-        }
-      }
-      return json({ ...recap, journal });
-    },
-  );
 
   server.registerTool(
     "dupliquer_session",

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
 import { findEntreprise, findEtape, findFormateur, findModule, findSalle, findSession, single } from "./resolve.js";
-import { LIMITE, borner, json, splitDateTime, today } from "./util.js";
+import { LIMITE, borner, json, splitDateTime } from "./util.js";
 
 const nomDe = (p: unknown) => {
   const r = (p ?? {}) as Row;
