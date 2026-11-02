@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
 import { appliquer } from "./ecriture.js";
 import { findEntreprise, findSession, inscriptionsSession, single } from "./resolve.js";
-import { CHAMPS_PERSONNALISES, json, nomDe, normalize, num, today, vrai } from "./util.js";
+import { CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, normalize, num, today, vrai } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const ENTREPRISE = z.string().describe("Raison sociale, numéro ENT_… ou id");
@@ -39,7 +39,6 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "fiche_entreprise",
     {
-      title: "Fiche complète d'une entreprise",
       description:
         "Vue d'ensemble d'une entreprise cliente : coordonnées, chiffre d'affaires, contacts, salariés participants, " +
         "formations passées et à venir, dernières actions commerciales et opportunités en cours.",
@@ -119,7 +118,6 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "enregistrer_entreprise",
     {
-      title: "Créer ou mettre à jour une entreprise",
       description:
         "Crée une entreprise dans le CRM, ou met à jour la fiche existante. La fiche existante est retrouvée par " +
         "`entreprise` (raison sociale, ENT_… ou id) ou par SIRET, pour éviter les doublons.",
@@ -194,7 +192,6 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "enregistrer_contact",
     {
-      title: "Créer ou mettre à jour un contact d'entreprise",
       description:
         "Crée un contact (interlocuteur RH, formation, achats…) dans une entreprise, ou met à jour un contact existant " +
         "retrouvé par son id ou son email. Peut le définir comme contact principal, secondaire ou de facturation. " +
@@ -250,7 +247,6 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "enregistrer_participant",
     {
-      title: "Créer ou mettre à jour un participant",
       description:
         "Crée un participant (stagiaire) dans le CRM ou met à jour sa fiche, retrouvée par id ou email (un seul " +
         "email par participant dans Dendreo). Par défaut dry_run=true : rien n'est écrit.",
@@ -318,7 +314,6 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "convertir_en_particulier",
     {
-      title: "Convertir en particulier",
       description:
         "Convertit un participant (ou une entreprise) en particulier, par exemple pour une formation financée en CPF. " +
         "Conditions Dendreo : le participant est seul dans son entreprise et celle-ci a au plus un contact ; une " +
@@ -365,7 +360,6 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "actions_commerciales",
     {
-      title: "Actions commerciales",
       description:
         "Journal commercial : `lister` les échanges d'une entreprise ou d'un commercial, ou les relances à venir ; " +
         "`ajouter` un compte rendu d'échange avec une date de relance. Ajout en dry_run=true par défaut.",
@@ -380,6 +374,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
         date_action: DATE.optional().describe("Défaut : aujourd'hui"),
         date_relance: DATE.optional(),
         priorite: z.number().int().min(0).max(2).optional(),
+        limite: LIMITE,
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: false },
@@ -397,14 +392,16 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
           commercial_id: args.commercial_id,
           relance: args.relances_a_venir ? 1 : undefined,
         });
+        const { items, avertissement } = borner(rows, args.limite);
         return json({
           nombre: rows.length,
-          actions: rows.map((a) => ({
+          ...(avertissement ? { avertissement } : {}),
+          actions: items.map((a) => ({
             id: a.id_action_commerciale,
             date: String(a.date_action).slice(0, 10),
             relance: a.date_relance ? String(a.date_relance).slice(0, 10) : undefined,
             priorite: a.priorite,
-            compte_rendu: a.compte_rendu,
+            compte_rendu: a.compte_rendu ? String(a.compte_rendu).slice(0, 400) : undefined,
             commerciaux: ((a.commerciaux ?? []) as Row[]).map((c) => c.nom_complet),
             interlocuteurs: ((a.interlocuteurs ?? []) as Row[]).map((i) => i.raison_sociale ?? nomDe(i)),
           })),
@@ -432,7 +429,6 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "opportunites",
     {
-      title: "Opportunités commerciales",
       description:
         "Pipe commercial : `lister` les opportunités ouvertes (par étape ou entreprise) avec leurs devis et les sessions " +
         "issues de ces devis ; `creer` une opportunité pour une entreprise (dry_run=true par défaut).",
@@ -445,6 +441,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
         id_contact: z.string().optional(),
         id_administrateur: z.string().optional().describe("Commercial en charge"),
         source: z.string().optional().describe("Source (intitulé ou id)"),
+        limite: LIMITE,
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: false },
@@ -478,9 +475,11 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
             (!etape || String(o.opportunite_etape_id) === String(etape.id)) &&
             (args.inclure_fermees || (!o.closed_at && !o.lost_at)),
         );
+        const { items: pagees, avertissement } = borner(filtrees, args.limite);
         return json({
           nombre: filtrees.length,
-          opportunites: filtrees.map((o) => ({
+          ...(avertissement ? { avertissement } : {}),
+          opportunites: pagees.map((o) => ({
             id: o.id,
             numero: o.numero_complet,
             etape: libelleEtape(o.opportunite_etape_id),
@@ -519,7 +518,6 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
   server.registerTool(
     "enregistrer_particulier",
     {
-      title: "Créer ou mettre à jour un particulier",
       description:
         "Crée un particulier (personne finançant elle-même sa formation : fiche contact + entreprise + participant) ou met à jour " +
         "sa fiche, retrouvée par id ou email. Par défaut dry_run=true : rien n'est écrit.",
@@ -569,7 +567,6 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
   server.registerTool(
     "convertir_particulier_en_entreprise",
     {
-      title: "Convertir un particulier en entreprise",
       description:
         "Transforme un particulier en entreprise + contact + participant (par exemple quand un indépendant devient client avec sa " +
         "société). Par défaut dry_run=true. Le sens inverse est `convertir_en_particulier`.",
@@ -596,7 +593,6 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
   server.registerTool(
     "importer_crm",
     {
-      title: "Importer des fiches CRM en masse",
       description:
         `Importe jusqu'à ${MAX_LIGNES} fiches d'un même type (entreprises, contacts, participants, particuliers) depuis une liste. ` +
         "Dédoublonnage : entreprises par SIRET puis raison sociale ; contacts, participants et particuliers par email. " +
@@ -670,14 +666,14 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
           journal.push(`ligne ${p.ligne} ${p.libelle} : erreur : ${(e as Error).message}`);
         }
       }
-      return json({ ok: true, ...recap, journal });
+      const { lignes: _lignes, ...resume } = recap;
+      return json({ ok: true, ...resume, journal });
     },
   );
 
   server.registerTool(
     "preinscriptions",
     {
-      title: "Pré-inscriptions du catalogue à traiter",
       description:
         "Sessions qui ont reçu des pré-inscriptions depuis le catalogue public, avec le détail par statut (à traiter, en attente, " +
         "paiement en attente, validées, refusées). Par défaut, seulement les sessions avec des pré-inscriptions à traiter.",
@@ -700,7 +696,6 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
   server.registerTool(
     "supprimer_session",
     {
-      title: "Supprimer une session",
       description:
         "Supprime une action de formation, avec garde-fous : refusé si des participants sont inscrits ou si des présences sont " +
         "saisies (annuler d'abord les inscriptions, ou passer la session à l'étape « Annulée » avec `modifier_session`). " +
@@ -730,7 +725,6 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
   server.registerTool(
     "supprimer_fiche",
     {
-      title: "Supprimer une fiche CRM",
       description:
         "Supprime un participant, un contact, une entreprise ou une action commerciale, avec garde-fous (participant inscrit à des " +
         "sessions, entreprise avec inscriptions : refusé). Supprimer le contact d'un particulier supprime tout le particulier. " +
@@ -779,7 +773,6 @@ export function registerCrmNettoyageTools(server: McpServer, client: DendreoClie
   server.registerTool(
     "restaurer_entreprise",
     {
-      title: "Restaurer une entreprise supprimée",
       description: "Restaure une entreprise supprimée, à partir de son id. Par défaut dry_run=true.",
       inputSchema: { id_entreprise: z.string(), dry_run: z.boolean().default(true) },
       annotations: { readOnlyHint: false, destructiveHint: false },

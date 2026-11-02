@@ -12,15 +12,13 @@ Lecture :
 
 | Outil | Rôle |
 |---|---|
-| `lister_sessions_a_venir` | Sessions qui commencent à partir d'aujourd'hui : inscrits, places, alerte sous le minimum |
-| `formations_du_mois` | Sessions qui commencent dans un mois donné (mois courant par défaut) |
-| `rechercher_sessions` | Recherche par formation, formateur, entreprise, type, étape, texte libre et période |
+| `rechercher_sessions` | Recherche par formation, formateur, entreprise, type, étape, texte libre et période (sans période = sessions à venir ; `mois` : un mois donné ; `limite`) |
 | `detail_session` | Fiche complète d'une session : modules, créneaux, formateurs, participants |
 | `conflits_planning` | Formateurs ou salles réservés sur deux créneaux qui se chevauchent |
 | `entreprises_session` | Entreprises rattachées à une session et leur contact référent |
 | `sessions_permanentes` | Sessions permanentes (entrées et sorties permanentes) d'un module |
 | `prochaines_sessions_catalogue` | Sessions visibles sur le catalogue en ligne |
-| `agenda` | Vue agenda d'une période par formateur, salle ou entreprise : créneaux, étape, remplissage |
+| `agenda` | Vue agenda d'une période par formateur (= planning d'un formateur), salle ou entreprise : créneaux, étape, remplissage |
 | `occupation_salles` | Taux d'occupation des salles sur une période |
 | `preinscriptions` | Sessions qui ont reçu des pré-inscriptions du catalogue public à traiter |
 
@@ -66,7 +64,6 @@ Lecture :
 
 | Outil | Rôle |
 |---|---|
-| `planning_formateur` | Créneaux d'un formateur sur une période, avec la session concernée |
 | `formateurs_disponibles` | Formateurs aptes à un module et libres aux dates voulues |
 | `suivi_rsvp` | Confirmations (Oui / Non / Peut-être) des formateurs créneau par créneau |
 
@@ -88,9 +85,7 @@ Lecture :
 | `emargements_manquants` | Créneaux passés sans présence renseignée, pour une session ou une période |
 | `taches_en_attente` | Émargements, signatures et questionnaires en attente sur l'extranet, avec les liens de relance |
 | `evaluations_session` | Réussite par module, notes, compétences acquises |
-| `satisfaction` | Rapport de satisfaction par session, formateur ou formation : taux de réponse, non-répondants, moyennes par module et par formateur, détail par question, verbatims |
-| `appreciations_negatives` | Notes sous un seuil et commentaires sur une période, pour le plan d'amélioration |
-| `relancer_satisfaction` | Non-répondants aux questionnaires à chaud / à froid avec leur lien de connexion automatique |
+| `satisfaction` | Rapport de satisfaction par session, formateur ou formation : taux de réponse, non-répondants, moyennes par module et par formateur, détail par question, verbatims ; avec `seuil_pourcent` : appréciations négatives sur une période ; relance des non-répondants : `taches_en_attente` (types=satisfaction, autologin) |
 | `validation_emargements` | Créneaux passés où le formateur ou des participants n'ont pas signé |
 | `controle_conformite_session` | Avant les attestations : présences manquantes, émargements non signés, participants éligibles |
 

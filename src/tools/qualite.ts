@@ -7,7 +7,7 @@ import { statut } from "./suivi.js";
 import { json, lots, nomDe, normalize, num, splitDateTime, today, vrai } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
+const SESSION = z.string().describe("Id ou numéro ADF_…");
 
 const FIELDS_ADF = "id_action_de_formation,numero_complet,intitule,type,date_debut,date_fin,id_etape_process,include_in_bpf,objectif,num_session_dpc,nb_participants_inscrits";
 
@@ -48,7 +48,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "controle_bpf",
     {
-      title: "Contrôle des données du BPF",
       description:
         "Repère les sessions d'un exercice exclues ou mal renseignées pour le BPF : « inclure dans le BPF » décoché, étape non " +
         "confirmée (détection d'après le nom de l'étape : la configuration « confirmée » n'est pas exposée par l'API), sans " +
@@ -95,7 +94,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "controle_statuts_bpf",
     {
-      title: "Contrôle des statuts BPF",
       description:
         "Participants dont le statut BPF est « non renseigné », et entreprises dont le nom ressemble à un financeur " +
         "(France Travail, OPCO, région…) qui devraient être saisies comme financeurs externes plutôt que comme clients.",
@@ -121,7 +119,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "sous_traitance",
     {
-      title: "Sous-traitance (BPF F-2 / G)",
       description:
         "Lecture : intervenants extérieurs (formateurs « exterieur », entreprise sous-traitante) et financements de type " +
         "sous-traitance sur une période. Écriture : bascule le statut BPF d'un formateur d'une session entre intérieur et " +
@@ -173,7 +170,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "dpc",
     {
-      title: "Contrôle DPC",
       description:
         "Modules éligibles DPC, sessions sans numéro de session DPC et participants sans ADELI / RPPS pour une période. " +
         "Les numéros DPC se modifient avec `modifier_session` ou dans Dendreo.",
@@ -212,7 +208,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "qualite_crm",
     {
-      title: "Qualité des données CRM",
       description:
         "Détecte les doublons d'entreprises (SIRET, raison sociale), les entreprises sans contact principal ou sans contact " +
         "de facturation, et les participants sans email.",
@@ -259,7 +254,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "controle_conformite_session",
     {
-      title: "Conformité d'une session avant attestations",
       description:
         "Avant de générer les attestations ou certificats : présences manquantes, émargements non signés, étape de la session, " +
         "et liste des participants éligibles (toutes présences saisies, aucune absence non justifiée).",
@@ -302,7 +296,6 @@ export function registerQualiteTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "validation_emargements",
     {
-      title: "Émargements non signés",
       description:
         "Créneaux passés où le formateur ou des participants n'ont pas signé (emargement_count = 0), sur une session ou une période.",
       inputSchema: {

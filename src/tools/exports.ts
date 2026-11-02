@@ -103,7 +103,6 @@ export function registerExportTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "telecharger_export",
     {
-      title: "Télécharger un export Dendreo",
       description:
         "Télécharge n'importe quel export du menu Reporting de Dendreo sur une période (`nom_export` = slug de l'export) " +
         "et renvoie le fichier (CSV en texte s'il est court, sinon pièce jointe). Slug inconnu : la liste des slugs est renvoyée.",
@@ -137,7 +136,6 @@ export function registerExportTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "indicateurs_activite",
     {
-      title: "Indicateurs d'activité",
       description:
         "Synthèse d'activité sur une période : sessions, stagiaires inscrits, heures de formation et heures-stagiaires " +
         "(estimées : inscrits × durée des créneaux de la période), taux de remplissage, CA facturé HT par mois. " +
@@ -174,7 +172,6 @@ export function registerExportTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "pilotage_adf",
     {
-      title: "Pilotage du portefeuille de sessions",
       description:
         "Récapitulatif des sessions d'une période, groupées par étape et type (INTER / INTRA) : nombre de sessions, inscrits, " +
         "heures, montants financé / facturé / payé (d'après les financements). Le détail par session est renvoyé avec `detail=true`.",

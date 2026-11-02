@@ -12,10 +12,10 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { CHAMPS_PERSONNALISES, json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
+const SESSION = z.string().describe("Id ou numéro ADF_…");
 
 const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
 const nomLap = (l: Row) =>
@@ -46,7 +46,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "modifier_session",
     {
-      title: "Modifier une session",
       description:
         "Modifie une action de formation existante : étape (ex. passer en « Réalisation » ou « Annulée »), intitulé, " +
         "salle, nombre de places, responsable, commentaires, publication au catalogue en ligne, émargement électronique, " +
@@ -121,7 +120,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "annuler_inscription",
     {
-      title: "Désinscrire des participants",
       description:
         "Supprime l'inscription de participants à une action de formation. Refuse les participants dont des présences " +
         "ou absences sont déjà saisies (à corriger dans Dendreo). Par défaut dry_run=true : rien n'est supprimé. " +
@@ -170,7 +168,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "modifier_inscription",
     {
-      title: "Modifier une inscription",
       description:
         "Modifie l'inscription d'un participant à une session : prix personnalisé (session mono-module), numéro de " +
         "dossier CPF, suivi pédagogique (remplace le texte existant). Par défaut dry_run=true : rien n'est écrit.",
@@ -213,7 +210,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "transferer_inscription",
     {
-      title: "Transférer un participant vers une autre session",
       description:
         "Déplace un participant d'une session vers une autre (en général une autre date du même module) : inscription " +
         "à la nouvelle session puis désinscription de l'ancienne. Refusé si des présences sont déjà saisies sur l'ancienne.",
@@ -282,7 +278,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "inscription_modules",
     {
-      title: "Modules suivis par un participant",
       description:
         "Pour une session à plusieurs modules : affiche à quels modules chaque participant est inscrit, et permet " +
         "d'inscrire ou désinscrire un participant d'un module. Sans `participant`, liste toute la session. " +
@@ -355,7 +350,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "retirer_formateur",
     {
-      title: "Retirer un formateur d'une session",
       description:
         "Déstaffe un formateur d'une session, sur tous ses créneaux (il est alors retiré de la session) ou sur certains " +
         "jours. Dendreo refuse si le formateur a émargé ou est facturé, ou si un participant l'a déjà noté.",
@@ -421,7 +415,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "dupliquer_session",
     {
-      title: "Dupliquer une session",
       description:
         "Crée une nouvelle session à partir d'une session existante (même module, formateur, type, entreprise, salle, " +
         "places et horaires) sur de nouvelles dates. Les participants ne sont pas copiés. " +
@@ -501,7 +494,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "formateurs_disponibles",
     {
-      title: "Formateurs disponibles pour une formation",
       description:
         "Pour un module et des dates, liste les formateurs aptes à l'animer (déclarés dans le catalogue) en indiquant " +
         "ceux qui sont libres et ceux qui ont déjà un créneau ces jours-là.",
@@ -544,7 +536,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "conflits_planning",
     {
-      title: "Conflits de planning",
       description:
         "Détecte sur une période les doubles réservations : un formateur ou une salle sur deux créneaux qui se " +
         "chevauchent, et les participants inscrits deux fois au même module sur des sessions qui se recouvrent.",
@@ -603,7 +594,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "souhaits_formation",
     {
-      title: "Souhaits de formation",
       description:
         "Gère les souhaits de formation des participants (besoin exprimé pour un module) : `lister` par module ou " +
         "participant (ex. qui attend une session Excel ?), `ajouter` un souhait, `supprimer` des souhaits. " +
@@ -667,7 +657,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "entreprises_session",
     {
-      title: "Entreprises d'une session",
       description:
         "Liste les entreprises rattachées à une session (mode de financement, contact référent) et permet de changer " +
         "le contact référent d'une entreprise pour cette session (dry_run=true par défaut).",
@@ -712,7 +701,6 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "sessions_permanentes",
     {
-      title: "Sessions permanentes",
       description:
         "Liste les sessions permanentes (entrées et sorties permanentes) d'un module ou de tout le catalogue, " +
         "et permet d'en modifier le prix, la durée, l'ouverture ou la garantie (dry_run=true par défaut).",
@@ -723,6 +711,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
         duree_heures: z.number().optional(),
         ouverte: z.boolean().optional(),
         garantie: z.boolean().optional(),
+        limite: LIMITE,
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: false },
@@ -744,20 +733,23 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
         if (!("row" in m)) return json(m);
         idModule = String(m.row.id_module);
       }
-      return json(await client.list("sessions_permanentes.php", { id_module: idModule, id: args.id }));
+      const { items, total, avertissement } = borner(await client.list("sessions_permanentes.php", { id_module: idModule, id: args.id }), args.limite);
+      return json(total ? { nombre: total, avertissement, sessions: items } : items);
     },
   );
 
   server.registerTool(
     "prochaines_sessions_catalogue",
     {
-      title: "Sessions publiées au catalogue en ligne",
       description:
         "Prochaines sessions visibles sur le catalogue public (comme le widget du site) : formation, dates, prix, " +
         "lieu, places, et la satisfaction moyenne du module.",
-      inputSchema: {},
+      inputSchema: { limite: LIMITE },
       annotations: { readOnlyHint: true },
     },
-    async () => json(await client.list("catalogue_prochaines_sessions.php", { include: "satisfaction" })),
+    async ({ limite }) => {
+      const { items, total, avertissement } = borner(await client.list("catalogue_prochaines_sessions.php", { include: "satisfaction" }), limite);
+      return json(total ? { nombre: total, avertissement, sessions: items } : items);
+    },
   );
 }

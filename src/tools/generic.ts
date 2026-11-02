@@ -10,7 +10,6 @@ export function registerGenericTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "dendreo_get",
     {
-      title: "Lire une ressource Dendreo",
       description:
         "Appel GET en lecture seule sur l'API Dendreo. `endpoint` est le fichier de ressource " +
         "(ex. participants.php). Préférer les outils métier ; toujours passer `fields` dans `params` pour limiter la réponse.",

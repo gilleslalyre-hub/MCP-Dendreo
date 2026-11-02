@@ -6,13 +6,12 @@ import { findEntreprise, findFormateur, findModule, findSalle, findSession, sing
 import { arrondi, heuresCreneau, json, nomDe, normalize, num, vrai } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
+const SESSION = z.string().describe("Id ou numéro ADF_…");
 
 export function registerCatalogueTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "enregistrer_module",
     {
-      title: "Créer, modifier ou supprimer un module",
       description:
         "Crée ou modifie un module du catalogue (contenu pédagogique, durée, prix, catégorie, formateurs aptes, planning type) " +
         "ou le supprime (refusé s'il est programmé dans des sessions). Planning type : `jours` seul, ou `jours` + `duree_par_jour`, " +
@@ -110,7 +109,6 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
   server.registerTool(
     "categories_modules",
     {
-      title: "Catégories de modules",
       description:
         "Arborescence des catégories de modules du catalogue, et modules sans catégorie (invisibles dans le catalogue public classé). " +
         "Permet de créer ou modifier une catégorie (dry_run=true par défaut).",
@@ -168,7 +166,6 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
   server.registerTool(
     "enregistrer_formateur",
     {
-      title: "Créer, modifier ou supprimer un formateur",
       description:
         "Crée ou modifie une fiche formateur (statut, statut BPF, rémunération, n° de déclaration d'activité, coordonnées) avec " +
         "détection des doublons (nom + prénom, email), ou la supprime. Par défaut dry_run=true : rien n'est écrit. " +
@@ -245,7 +242,6 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
   server.registerTool(
     "creer_salle",
     {
-      title: "Créer une salle de formation",
       description:
         "Crée une salle : interne (centre de formation), externe, virtuelle (e-learning) ou chez le client. L'API refuse la " +
         "modification et la suppression d'une salle : elles se font dans Dendreo. `lister_centres=true` liste les centres de formation. " +
@@ -298,7 +294,6 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
   server.registerTool(
     "planification_progressive",
     {
-      title: "Planification progressive et modules d'une session",
       description:
         "Lecture : pour chaque module d'une session, heures prévues comparées aux heures planifiées sur des créneaux (reste à planifier). " +
         "Écriture : ajoute un module à une session existante (avec une durée pour une planification progressive) ou crée une séance " +

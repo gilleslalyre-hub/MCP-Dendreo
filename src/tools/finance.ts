@@ -7,7 +7,7 @@ import { findEntreprise, findSession, single } from "./resolve.js";
 import { LIMITE, addDays, arrondi, borner, compact, dateRenseignee, json, normalize, num, today } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
+const SESSION = z.string().describe("Id ou numéro ADF_…");
 
 const FORMATS_COMPTA = [
   "ebp", "ebp_v2", "ebp_v3", "ebp_aux", "ebp_aux_txt", "generique", "generique_txt", "sage_pnm", "sage_50", "sage_x3",
@@ -48,7 +48,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "factures",
     {
-      title: "Factures émises",
       description:
         "Factures par session, entreprise, financeur ou période d'émission : montants, payé, restant dû, échéance, statut, " +
         "niveau de relance et lien PDF. `detail=true` ajoute les financements et règlements de chaque facture.",
@@ -104,7 +103,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "impayes",
     {
-      title: "Factures impayées",
       description:
         "Factures échues non soldées (échéance dépassée et restant dû > 0), groupées par client ou financeur, avec le " +
         "retard en jours et le niveau de relance déjà atteint.",
@@ -140,7 +138,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "reglements",
     {
-      title: "Règlements",
       description:
         "Liste les règlements (par facture ou période), ou en saisit, modifie ou supprime un. Seuls les règlements non exportés en " +
         "comptabilité sont modifiables ou supprimables. Écritures en dry_run=true par défaut : ne relancer avec dry_run=false " +
@@ -210,7 +207,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "financements",
     {
-      title: "Financements d'une session",
       description:
         "Qui finance quoi : financements d'une session, d'une entreprise ou d'un financeur (OPCO, entreprise, CPF), avec " +
         "montants financé / facturé / payé et participants concernés. Peut supprimer un financement (dry_run=true par défaut) ; " +
@@ -281,7 +277,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "financeurs",
     {
-      title: "Financeurs externes",
       description: "Recherche un financeur (OPCO, financeur public) et renvoie sa fiche, ses factures et ses contacts rattachés.",
       inputSchema: { financeur: z.string().optional().describe("Raison sociale ou id ; vide = liste de tous les financeurs") },
       annotations: { readOnlyHint: true },
@@ -305,7 +300,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "bilan_financier_session",
     {
-      title: "Bilan financier d'une session",
       description:
         "CA prévu (prix des inscriptions) comparé au financé, au facturé et à l'encaissé pour une session, avec les écarts " +
         "(reste à facturer, reste à encaisser) et l'alerte « session non facturée ».",
@@ -347,7 +341,6 @@ export function registerFinanceTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "export_comptable",
     {
-      title: "Export comptable des ventes",
       description:
         "Génère le fichier d'export comptable du journal des ventes (Sage, EBP, Cegid, Quadra…) pour une liste de factures " +
         "(numéros FA_… ou ids) ou un lot, et renvoie le fichier.",

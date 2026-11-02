@@ -59,7 +59,6 @@ export function registerSessionTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "rechercher_sessions",
     {
-      title: "Rechercher des sessions",
       description:
         "Recherche des actions de formation par formation (module), formateur, entreprise cliente, type, étape, " +
         "texte libre (intitulé ou numéro) et période de début. Sans période, cherche les sessions à partir d'aujourd'hui (= sessions à venir). " +

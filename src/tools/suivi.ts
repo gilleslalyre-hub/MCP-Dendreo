@@ -12,7 +12,7 @@ import {
 import { LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
+const SESSION = z.string().describe("Id ou numéro ADF_…");
 
 const slotLabel = (c: Row | undefined) => {
   if (!c) return "créneau inconnu";
@@ -47,7 +47,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "feuille_presence",
     {
-      title: "Feuille de présence d'une session",
       description:
         "Présences et absences de chaque participant sur chaque créneau d'une action de formation : heures suivies, " +
         "taux d'assiduité, absences justifiées ou non, créneaux passés sans présence renseignée.",
@@ -111,7 +110,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "saisir_presences",
     {
-      title: "Saisir des présences ou absences",
       description:
         "Marque des participants présents ou absents (absence justifiée ou non, présence partielle en heures) sur des " +
         "créneaux d'une action de formation. Un créneau déjà émargé électroniquement est refusé par Dendreo.",
@@ -197,7 +195,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "taches_en_attente",
     {
-      title: "Tâches en attente des participants",
       description:
         "Ce qui reste à faire sur l'extranet des participants d'une session (ou d'un participant) : émargements " +
         "électroniques en cours, documents à signer, questionnaires de satisfaction et d'auto-positionnement non remplis. " +
@@ -261,7 +258,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "emargements_manquants",
     {
-      title: "Émargements et présences manquants",
       description:
         "Liste, pour une session ou pour toutes les sessions d'une période, les créneaux passés dont la présence " +
         "n'est pas renseignée pour certains participants, avec les émargements électroniques encore ouverts.",
@@ -316,7 +312,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "evaluations_session",
     {
-      title: "Évaluations des participants d'une session",
       description:
         "Résultats des participants d'une action de formation : réussite par module, note, appréciation et niveau " +
         "d'acquisition de chaque compétence (acquis, en cours, non acquis).",
@@ -366,7 +361,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "evaluer_participant",
     {
-      title: "Évaluer un participant",
       description:
         "Enregistre l'évaluation d'un participant sur un module d'une session (réussite, note, appréciation) ou sur une " +
         "compétence (acquis, en cours, non acquis). Par défaut dry_run=true : rien n'est écrit. " +
@@ -440,7 +434,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "satisfaction",
     {
-      title: "Résultats des questionnaires de satisfaction",
       description:
         "Synthèse des réponses aux questionnaires de satisfaction pour une session, un formateur ou un module : " +
         "note moyenne par question (en % et sur le barème), nombre de réponses et commentaires libres (10 max par question). " +

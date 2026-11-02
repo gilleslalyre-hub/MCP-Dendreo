@@ -27,7 +27,6 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "detail_session",
     {
-      title: "Détail d'une session",
       description:
         "Fiche complète d'une action de formation : informations générales, remplissage, modules programmés, " +
         "créneaux (dates, heures, formateurs), formateurs staffés et participants inscrits.",
@@ -90,7 +89,6 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "rechercher_participant",
     {
-      title: "Rechercher un participant",
       description:
         "Recherche des participants par email, nom ou date de naissance, et affiche leurs formations " +
         "(sessions auxquelles ils sont inscrits).",
@@ -139,7 +137,6 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "catalogue",
     {
-      title: "Consulter le catalogue et les référentiels",
       description:
         "Consulte les référentiels Dendreo : modules de formation (durée, prix, formateurs aptes), formateurs, " +
         "entreprises, salles et étapes des actions de formation.",

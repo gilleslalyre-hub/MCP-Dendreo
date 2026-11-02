@@ -24,12 +24,11 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "staffer_formateur",
     {
-      title: "Staffer un formateur sur une session",
       description:
         "Ajoute un formateur à une action de formation et l'affecte à tous ses créneaux ou à certains jours. " +
         "Peut remplacer un autre formateur sur ces créneaux (il en est déstaffé).",
       inputSchema: {
-        session: z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)"),
+        session: z.string().describe("Id ou numéro ADF_…"),
         formateur: z.string().optional().describe("Formateur à staffer : prénom et nom, ou id (ou utiliser entreprise_sous_traitante)"),
         entreprise_sous_traitante: z.string().optional().describe("Entreprise sous-traitante à staffer à la place d'un formateur (raison sociale, ENT_… ou id) : ajoutée à la session, sans créneaux"),
         jours: z.array(DATE).optional().describe("Limiter à ces jours (AAAA-MM-JJ). Par défaut tous les créneaux"),
@@ -118,13 +117,12 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "gerer_creneaux",
     {
-      title: "Ajouter, modifier ou décaler des créneaux",
       description:
         "Modifie le planning d'une action de formation : ajouter des créneaux, modifier la date, les heures ou l'intitulé " +
         "de créneaux existants, décaler des créneaux d'un nombre de jours, ou définir la salle / le lien visio d'un créneau " +
         "(alerte si la capacité de la salle est inférieure aux inscrits). Un créneau émargé ne peut pas être modifié.",
       inputSchema: {
-        session: z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)"),
+        session: z.string().describe("Id ou numéro ADF_…"),
         ajouter: z
           .array(z.object({ date: DATE, heure_debut: HEURE, heure_fin: HEURE, intitule: z.string().optional(),
           salle: z.string().optional().describe("Salle (intitulé ou id) du créneau"),
@@ -256,12 +254,11 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "suivi_rsvp",
     {
-      title: "Confirmations des formateurs (RSVP)",
       description:
         "Réponses des formateurs aux invitations RSVP, créneau par créneau : Oui, Non, Peut-être ou sans réponse, avec la date " +
         "d'envoi et les remarques. L'envoi des invitations se fait dans Dendreo (l'API ne le permet pas).",
       inputSchema: {
-        session: z.string().optional().describe("Id de l'action de formation ou numéro complet (ADF_…)"),
+        session: z.string().optional().describe("Id ou numéro ADF_…"),
         formateur: z.string().optional().describe("Prénom et nom, ou id"),
         du: DATE.optional().describe("Sans session : début de période (défaut : aujourd'hui)"),
         au: DATE.optional().describe("Sans session : fin de période (défaut : dans 30 jours)"),
@@ -320,7 +317,6 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "agenda",
     {
-      title: "Agenda sur une période",
       description:
         "Vue agenda d'une période, par formateur (= planning du formateur), salle ou entreprise : créneaux triés, session, étape et remplissage (inscrits / places).",
       inputSchema: {
@@ -390,7 +386,6 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "occupation_salles",
     {
-      title: "Occupation des salles",
       description:
         "Taux d'occupation des salles sur une période : heures réservées sur les créneaux, comparées à une journée de " +
         "référence (heures ouvrées par jour × jours ouvrés). Pour l'export Dendreo exact, utiliser `telecharger_export` (slug occupation-salles).",

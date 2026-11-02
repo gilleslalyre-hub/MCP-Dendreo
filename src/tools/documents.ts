@@ -5,7 +5,7 @@ import type { DendreoClient, Query, Row } from "../dendreo/client.js";
 import { findEntreprise, findFormateur, findInscription, findModule, findSession, inscriptionsSession, single } from "./resolve.js";
 import { json, nomDe, vrai } from "./util.js";
 
-const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
+const SESSION = z.string().describe("Id ou numéro ADF_…");
 const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
 const nomLap = (l: Row) => nomDe(l.participant) ?? `participant ${l.id_participant}`;
 
@@ -37,7 +37,6 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "generer_document",
     {
-      title: "Générer un document",
       description:
         "Génère un document à partir d'un modèle Dendreo (convocation, convention, attestation, certificat de " +
         "réalisation, programme…) et renvoie le fichier. Le modèle se désigne par son id (`modele`, visible dans " +
@@ -167,7 +166,6 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "fichiers",
     {
-      title: "Fichiers d'une session ou d'une fiche",
       description:
         "Gère les fichiers stockés dans Dendreo : `lister` ceux d'une session, d'un participant, d'une entreprise, d'un " +
         "formateur ou d'un module (espace de stockage par défaut, ou une collection : partage_adf_participants, " +
@@ -245,7 +243,6 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "suivi_emails",
     {
-      title: "Suivi des emails envoyés",
       description:
         "Emails envoyés par Dendreo (convocations, relances…) pour une session ou un destinataire, avec le statut de " +
         "chaque destinataire : délivré, rejeté (bounced/dropped), signalé en spam, en cours. `echecs_seulement=true` " +
@@ -280,7 +277,6 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "checklist",
     {
-      title: "Checklist administrative",
       description:
         "Affiche l'avancement des checklists d'une session (ou d'un formateur, d'un module) et permet de cocher ou " +
         "décocher, ajouter, renommer ou supprimer des points ; `portefeuille=true` liste les sessions INTER dont la " +

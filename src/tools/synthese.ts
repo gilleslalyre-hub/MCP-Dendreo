@@ -27,12 +27,11 @@ export function registerSyntheseTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "tableau_de_bord_session",
     {
-      title: "Où en est une session ?",
       description:
         "Synthèse d'une action de formation en un appel : remplissage et places, étape, staffing des créneaux, " +
         "assiduité et présences manquantes, émargements et questionnaires en attente, emails non délivrés, " +
         "avancement des checklists, et la liste des points d'attention.",
-      inputSchema: { session: z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)") },
+      inputSchema: { session: z.string().describe("Id ou numéro ADF_…") },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
@@ -124,7 +123,6 @@ export function registerSyntheseTools(server: McpServer, client: DendreoClient) 
   server.registerTool(
     "relances_a_faire",
     {
-      title: "Relances à faire",
       description:
         "Sur une période (par défaut les 30 derniers jours), liste par session les participants à relancer : émargement " +
         "électronique ou document à signer en attente, questionnaire de satisfaction ou d'auto-positionnement non rempli, " +
