@@ -38,22 +38,21 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
     "generer_document",
     {
       description:
-        "Génère un document à partir d'un modèle Dendreo (convocation, convention, attestation, certificat de " +
-        "réalisation, programme…) et renvoie le fichier. Le modèle se désigne par son id (`modele`, visible dans " +
-        "Dendreo > Paramètres > Modèles de documents). Contexte : une session seule, une session + un participant, " +
-        "une entreprise, un formateur ou un module, une session + participant + module (document module × participant), " +
-        "une facture ou un devis, ou hors session une fiche participant/entreprise/formateur/module. " +
-        "`tous_les_participants=true` génère le document pour chaque inscrit de la session.",
+        "Génère un document (convocation, convention, attestation, certificat de réalisation, programme…) depuis le modèle " +
+        "`modele` (id_doc_type, visible dans Dendreo > Paramètres > Modèles de documents) et renvoie le fichier. Contexte : " +
+        "session seule, ou session + participant / entreprise / formateur / module, ou session + participant + module, ou " +
+        "facture (FA_… ou id), devis (id), ou hors session une fiche participant / entreprise / formateur / module. " +
+        "`tous_les_participants=true` : un document par inscrit.",
       inputSchema: {
-        modele: z.string().describe("Id du modèle de document (id_doc_type)"),
+        modele: z.string(),
         session: SESSION.optional(),
-        participant: z.string().optional().describe("Prénom et nom, email ou id (inscrit à la session si session fournie)"),
+        participant: z.string().optional().describe("Prénom et nom, email ou id"),
         tous_les_participants: z.boolean().default(false),
-        entreprise: z.string().optional().describe("Raison sociale, ENT_… ou id"),
-        formateur: z.string().optional().describe("Prénom et nom, ou id"),
-        module: z.string().optional().describe("Intitulé, MOD_… ou id (avec session + participant : document module × participant)"),
-        facture: z.string().optional().describe("Numéro complet (FA_…) ou id d'une facture"),
-        devis: z.string().optional().describe("Id d'un devis"),
+        entreprise: z.string().optional(),
+        formateur: z.string().optional(),
+        module: z.string().optional(),
+        facture: z.string().optional(),
+        devis: z.string().optional(),
         format: z.enum(["pdf", "word"]).default("pdf"),
       },
       annotations: { readOnlyHint: true },
@@ -167,20 +166,23 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
     "fichiers",
     {
       description:
-        "Gère les fichiers stockés dans Dendreo : `lister` ceux d'une session, d'un participant, d'une entreprise, d'un " +
-        "formateur ou d'un module (espace de stockage par défaut, ou une collection : partage_adf_participants, " +
-        "partage_participant, fichiers_lies_adf…) ; `deposer` un fichier (contenu en base64) ; `supprimer` des fichiers.",
+        "Fichiers stockés dans Dendreo. `lister` ceux d'une fiche (`cible` + `id_cible` ; session : id ou ADF_…). `deposer` " +
+        "(`nom_fichier` avec extension, `contenu_base64`) ; sur une session, `dossier` = sous-dossier et `entite_liee_type` + " +
+        "`entite_liee_id` lient le fichier à un élément de la session ; sans cible, tri automatique par QR code. `supprimer` " +
+        "les fichiers `ids`. `collection` : défaut docssaved (espace de stockage) ; autres : partage_adf_participants / " +
+        "_formateurs / _entreprises, partage_lap / _laf / _lae, partage_salle_public, partage_module_public / _formateurs, " +
+        "visuel, signature.",
       inputSchema: {
         action: z.enum(["lister", "deposer", "supprimer"]).default("lister"),
-        cible: z.enum(["action-de-formation", "participant", "entreprise", "formateur", "module", "contact", "lap", "laf", "lae", "salle"]).optional().describe("Sans cible, un dépôt part sans rattachement (tri automatique par QR code de Dendreo)"),
-        id_cible: z.string().optional().describe("Id de la fiche, ou de la session (id ou ADF_…) si cible=action-de-formation"),
-        collection: z.string().optional().describe("Collection Dendreo, par défaut l'espace de stockage (docssaved). Autres : partage_adf_participants / _formateurs / _entreprises, partage_lap, partage_laf, partage_lae, partage_salle_public, partage_module_public, partage_module_formateurs, visuel, signature"),
-        nom_fichier: z.string().optional().describe("Pour deposer : nom du fichier avec extension"),
-        contenu_base64: z.string().optional().describe("Pour deposer : contenu du fichier encodé en base64"),
-        dossier: z.string().optional().describe("Pour deposer sur une session : sous-dossier de l'espace de stockage"),
-        entite_liee_type: z.enum(["entreprise", "participant", "formateur", "module"]).optional().describe("Pour deposer sur une session : lie le fichier à cet élément de la session"),
-        entite_liee_id: z.string().optional().describe("Id de l'élément lié (avec entite_liee_type)"),
-        ids: z.array(z.string()).optional().describe("Pour supprimer : ids des fichiers"),
+        cible: z.enum(["action-de-formation", "participant", "entreprise", "formateur", "module", "contact", "lap", "laf", "lae", "salle"]).optional(),
+        id_cible: z.string().optional(),
+        collection: z.string().optional(),
+        nom_fichier: z.string().optional(),
+        contenu_base64: z.string().optional(),
+        dossier: z.string().optional(),
+        entite_liee_type: z.enum(["entreprise", "participant", "formateur", "module"]).optional(),
+        entite_liee_id: z.string().optional(),
+        ids: z.array(z.string()).optional(),
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: true },
@@ -277,20 +279,20 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
     "checklist",
     {
       description:
-        "Affiche l'avancement des checklists d'une session (ou d'un formateur, d'un module) et permet de cocher ou " +
-        "décocher, ajouter, renommer ou supprimer des points ; `portefeuille=true` liste les sessions INTER dont la " +
-        "checklist est incomplète.",
+        "Avancement des checklists d'une session (ou d'une autre `cible` + `id_cible`) ; `cocher`, `decocher`, `supprimer`, " +
+        "`renommer` des points (id_check ou intitulé), en `ajouter` (dans `id_checklist` si la cible en a plusieurs). " +
+        "`portefeuille=true` : sessions INTER dont la checklist est incomplète.",
       inputSchema: {
         session: SESSION.optional(),
-        cible: z.enum(["formateur", "module", "lap", "laf"]).optional().describe("Autre cible que la session"),
+        cible: z.enum(["formateur", "module", "lap", "laf"]).optional(),
         id_cible: z.string().optional(),
-        cocher: z.array(z.string()).optional().describe("Points à cocher (id_check ou intitulé)"),
-        decocher: z.array(z.string()).optional().describe("Points à décocher (id_check ou intitulé)"),
-        ajouter: z.array(z.string()).optional().describe("Nouveaux points à ajouter"),
-        supprimer: z.array(z.string()).optional().describe("Points à supprimer (id_check ou intitulé)"),
-        renommer: z.array(z.object({ point: z.string().describe("id_check ou intitulé actuel"), intitule: z.string() })).optional(),
-        portefeuille: z.boolean().default(false).describe("Vue d'ensemble : sessions INTER dont la checklist est incomplète"),
-        id_checklist: z.string().optional().describe("Checklist où ajouter, si la cible en a plusieurs"),
+        cocher: z.array(z.string()).optional(),
+        decocher: z.array(z.string()).optional(),
+        ajouter: z.array(z.string()).optional(),
+        supprimer: z.array(z.string()).optional(),
+        renommer: z.array(z.object({ point: z.string(), intitule: z.string() })).optional(),
+        portefeuille: z.boolean().default(false),
+        id_checklist: z.string().optional(),
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: false },

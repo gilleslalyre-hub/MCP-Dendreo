@@ -103,22 +103,23 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
     "modifier_session",
     {
       description:
-        "Modifie une action de formation existante : étape (ex. passer en « Réalisation » ou « Annulée »), intitulé, " +
-        "salle, nombre de places, responsable, commentaires, publication au catalogue en ligne, émargement électronique, " +
-        "champs personnalisés. Le type et les dates ne se modifient pas ici (dates : gerer_creneaux).",
+        "Modifie une session : étape (ex. « Réalisation », « Annulée »), intitulés (`intitule_court` : agenda), salle, places, " +
+        "responsable, commercial, commentaires (internes, remplacent l'existant ; `commentaires_agenda` : visibles agenda et " +
+        "extranets), publication au catalogue public avec inscriptions en ligne, émargement électronique, champs " +
+        "personnalisés. Type et dates non modifiables ici (dates : gerer_creneaux).",
       inputSchema: {
         session: SESSION,
-        etape: z.string().optional().describe("Nouvelle étape, ex. « Réalisation »"),
+        etape: z.string().optional(),
         intitule: z.string().optional(),
-        intitule_court: z.string().optional().describe("Intitulé affiché dans l'agenda"),
-        salle: z.string().optional().describe("Salle de formation (intitulé ou id)"),
+        intitule_court: z.string().optional(),
+        salle: z.string().optional(),
         places_min: z.number().int().optional(),
         places_max: z.number().int().optional(),
         id_responsable: z.number().int().optional(),
         id_commercial: z.number().int().optional(),
-        commentaires: z.string().optional().describe("Commentaires internes (remplacent les existants)"),
-        commentaires_agenda: z.string().optional().describe("Commentaires visibles sur l'agenda et les extranets"),
-        publication_en_ligne: z.boolean().optional().describe("Publier au catalogue public et accepter les inscriptions en ligne"),
+        commentaires: z.string().optional(),
+        commentaires_agenda: z.string().optional(),
+        publication_en_ligne: z.boolean().optional(),
         emargement_electronique: z.boolean().optional(),
         champs_personnalises: CHAMPS_PERSONNALISES,
         dry_run: z.boolean().default(true),
