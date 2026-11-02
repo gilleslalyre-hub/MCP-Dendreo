@@ -9,7 +9,7 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const SESSION = z.string().describe("Id de l'action de formation ou numéro complet (ADF_…)");
@@ -54,6 +54,7 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
       inputSchema: {
         session: SESSION,
         participant: z.string().optional().describe("Limiter à un participant : prénom et nom, email ou id"),
+        detail: z.boolean().default(false).describe("Ajouter le statut de chaque créneau (volumineux ; sinon résumé + absences)"),
       },
       annotations: { readOnlyHint: true },
     },
@@ -98,9 +99,9 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
           heures_presence: round(heuresPresence),
           heures_absence: round(heuresAbsence),
           assiduite: total > 0 ? `${Math.round((heuresPresence / total) * 100)} %` : undefined,
-          absences,
-          creneaux_passes_non_renseignes: nonRenseignes,
-          detail,
+          absences: absences.length ? absences : undefined,
+          creneaux_passes_non_renseignes: nonRenseignes.length ? nonRenseignes : undefined,
+          detail: args.detail ? detail : undefined,
         };
       });
       return json({ session: sessionLabel(s.row), nb_creneaux: creneaux.length, participants });
@@ -200,7 +201,7 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
       description:
         "Ce qui reste à faire sur l'extranet des participants d'une session (ou d'un participant) : émargements " +
         "électroniques en cours, documents à signer, questionnaires de satisfaction et d'auto-positionnement non remplis. " +
-        "Renvoie les liens à transmettre pour une relance.",
+        "Renvoie les liens à transmettre pour une relance (relance satisfaction : types=[\"satisfaction\"], autologin=true).",
       inputSchema: {
         session: SESSION.optional(),
         id_participant: z.string().optional().describe("À la place de session : id d'un participant"),
@@ -442,15 +443,44 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
       title: "Résultats des questionnaires de satisfaction",
       description:
         "Synthèse des réponses aux questionnaires de satisfaction pour une session, un formateur ou un module : " +
-        "note moyenne par question (en % et sur le barème), nombre de réponses et commentaires libres.",
+        "note moyenne par question (en % et sur le barème), nombre de réponses et commentaires libres (10 max par question). " +
+        "Avec `seuil_pourcent` : appréciations négatives (notes sous le seuil + commentaires) sur une période, pour le plan d'amélioration.",
       inputSchema: {
         session: SESSION.optional(),
         formateur: z.string().optional().describe("Prénom et nom, ou id"),
         formation: z.string().optional().describe("Module : intitulé, MOD_… ou id"),
+        seuil_pourcent: z.number().min(0).max(100).optional().describe("Mode appréciations négatives : liste les notes strictement sous ce seuil (%) avec commentaires, sur une période (du/au), au lieu de la synthèse"),
+        du: DATE.optional().describe("Mode appréciations négatives : début de période (défaut : 90 jours avant)"),
+        au: DATE.optional().describe("Mode appréciations négatives : fin de période (défaut : aujourd'hui)"),
+        limite: LIMITE,
       },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
+      if (args.seuil_pourcent !== undefined) {
+        const au = args.au ?? today();
+        const du = args.du ?? new Date(Date.parse(`${au}T00:00:00Z`) - 90 * 86400000).toISOString().slice(0, 10);
+        const adfs = await client.list("actions_de_formation.php", { started_after: du, started_before: `${au} 23:59:59`, fields: "id_action_de_formation,numero_complet,intitule" });
+        const nomAdf = new Map(adfs.map((a) => [String(a.id_action_de_formation), sessionLabel(a)]));
+        const reps: Row[] = [];
+        for (let i = 0; i < adfs.length; i += 50) {
+          reps.push(...(await client.list("reponses_questionnaire_satisfaction.php", { id_action_de_formation: adfs.slice(i, i + 50).map((a) => a.id_action_de_formation).join(",") })));
+        }
+        const negatives = reps
+          .filter((r) => r.notation_normalise !== "" && r.notation_normalise != null && Number(r.notation_normalise) < args.seuil_pourcent!)
+          .map((r) => ({
+            session: nomAdf.get(String(r.id_action_de_formation)) ?? r.id_action_de_formation,
+            module: ((r.module ?? {}) as Row).intitule,
+            question: r.intitule_question,
+            note: `${r.note}/${r.amplitude_notation}`,
+            pourcent: Number(r.notation_normalise),
+            participant: nomDe(r.participant),
+            commentaire: r.texte ? String(r.texte).slice(0, 300) : undefined,
+          }))
+          .sort((a, b) => a.pourcent - b.pourcent);
+        const { items, avertissement } = borner(negatives, args.limite);
+        return json({ periode: `${du} → ${au}`, seuil_pourcent: args.seuil_pourcent, nb_reponses_analysees: reps.length, nb_appreciations_negatives: negatives.length, ...(avertissement ? { avertissement } : {}), appreciations: items });
+      }
       const query: Record<string, string> = {};
       const filtres: Record<string, unknown> = {};
       if (args.session) {
@@ -489,7 +519,8 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
         nb_reponses: Math.max(a.notes.length, a.textes.length),
         moyenne: a.notes.length ? `${moyenne(a.notes)}/${a.amplitude}` : undefined,
         moyenne_pourcent: moyenne(a.normalises),
-        commentaires: a.textes.length ? a.textes : undefined,
+        commentaires: a.textes.length ? a.textes.slice(0, 10).map((t) => t.slice(0, 300)) : undefined,
+        nb_commentaires: a.textes.length > 10 ? a.textes.length : undefined,
       }));
       const tous = [...questions.values()].flatMap((a) => a.normalises);
       const norm = (r: Row) => (r.notation_normalise !== "" && r.notation_normalise != null ? Number(r.notation_normalise) : undefined);
@@ -534,76 +565,6 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
         ...(parFormateur.size ? { par_formateur: [...parFormateur.entries()].map(([formateur, rows]) => ({ formateur, nb_reponses: rows.length, moyenne_pourcent: moyenneDe(rows) })) } : {}),
         questions: parQuestion,
       });
-    },
-  );
-
-  server.registerTool(
-    "appreciations_negatives",
-    {
-      title: "Appréciations négatives",
-      description:
-        "Notes sous un seuil (en % de satisfaction) et commentaires libres sur les sessions d'une période, avec le " +
-        "participant, le module et la question, pour alimenter le plan d'amélioration continue.",
-      inputSchema: {
-        du: DATE.optional().describe("Début de période, sur la date de début de session (défaut : 90 jours avant aujourd'hui)"),
-        au: DATE.optional().describe("Fin de période (défaut : aujourd'hui)"),
-        seuil_pourcent: z.number().min(0).max(100).default(60).describe("Notes strictement inférieures à ce seuil"),
-        avec_commentaires: z.boolean().default(true).describe("Inclure aussi les commentaires libres des notes sous le seuil uniquement"),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const au = args.au ?? today();
-      const du = args.du ?? new Date(Date.parse(`${au}T00:00:00Z`) - 90 * 86400000).toISOString().slice(0, 10);
-      const adfs = await client.list("actions_de_formation.php", { started_after: du, started_before: `${au} 23:59:59`, fields: "id_action_de_formation,numero_complet,intitule" });
-      const nomAdf = new Map(adfs.map((a) => [String(a.id_action_de_formation), sessionLabel(a)]));
-      const reponses: Row[] = [];
-      for (let i = 0; i < adfs.length; i += 50) {
-        reponses.push(...(await client.list("reponses_questionnaire_satisfaction.php", { id_action_de_formation: adfs.slice(i, i + 50).map((a) => a.id_action_de_formation).join(",") })));
-      }
-      const negatives = reponses
-        .filter((r) => r.notation_normalise !== "" && r.notation_normalise != null && Number(r.notation_normalise) < args.seuil_pourcent)
-        .map((r) => ({
-          session: nomAdf.get(String(r.id_action_de_formation)) ?? r.id_action_de_formation,
-          module: ((r.module ?? {}) as Row).intitule,
-          question: r.intitule_question,
-          note: `${r.note}/${r.amplitude_notation}`,
-          pourcent: Number(r.notation_normalise),
-          participant: nomDe(r.participant),
-          commentaire: args.avec_commentaires ? r.texte || undefined : undefined,
-        }))
-        .sort((a, b) => a.pourcent - b.pourcent);
-      return json({ periode: `${du} → ${au}`, seuil_pourcent: args.seuil_pourcent, nb_reponses_analysees: reponses.length, nb_appreciations_negatives: negatives.length, appreciations: negatives });
-    },
-  );
-
-  server.registerTool(
-    "relancer_satisfaction",
-    {
-      title: "Relances des questionnaires de satisfaction",
-      description:
-        "Non-répondants aux questionnaires de satisfaction (à chaud ou à froid) d'une session, avec leur lien de connexion " +
-        "automatique à l'extranet pour la relance. L'API ne permet pas d'envoyer l'email : transmettre les liens depuis Dendreo ou à la main.",
-      inputSchema: { session: SESSION },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const s = await sessionOuErreur(client, args.session);
-      if (!("row" in s)) return json(s);
-      const idAdf = String(s.row.id_action_de_formation);
-      const laps = (await inscriptionsSession(client, idAdf)).filter((l) => String(l.id_participant) !== "0");
-      if (laps.length === 0) return json({ session: sessionLabel(s.row), non_repondants: [] });
-      const rows = await client.list("taches.php", { id: laps.map((l) => l.id_participant).join(","), types: "satisfaction", autologin: 1 });
-      const noms = new Map(laps.map((l) => [String(l.id_participant), nomLap(l)]));
-      const non_repondants = rows
-        .map((r) => ({
-          participant: noms.get(String(r.id_participant)) ?? r.id_participant,
-          questionnaires: ((r.taches ?? []) as Row[])
-            .filter((t) => String(t.id_adf) === idAdf)
-            .map((t) => ({ questionnaire: t.questionnaire_type ?? t.intitule, url: t.url })),
-        }))
-        .filter((p) => p.questionnaires.length > 0);
-      return json({ session: sessionLabel(s.row), inscrits: laps.length, nb_non_repondants: non_repondants.length, non_repondants });
     },
   );
 }

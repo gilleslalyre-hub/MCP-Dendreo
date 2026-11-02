@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DendreoError, type DendreoClient, type Row } from "../dendreo/client.js";
 import { findEntreprise, findFormateur, findSalle, findSession, single } from "./resolve.js";
-import { addDays, heuresCreneau, json, nomDe, splitDateTime, today } from "./util.js";
+import { LIMITE, addDays, borner, heuresCreneau, json, nomDe, splitDateTime, today } from "./util.js";
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const HEURE = z.string().regex(/^\d{2}:\d{2}$/);
@@ -322,13 +322,14 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
     {
       title: "Agenda sur une période",
       description:
-        "Vue agenda d'une période, par formateur, salle ou entreprise : créneaux triés, session, étape et remplissage (inscrits / places).",
+        "Vue agenda d'une période, par formateur (= planning du formateur), salle ou entreprise : créneaux triés, session, étape et remplissage (inscrits / places).",
       inputSchema: {
         du: DATE.optional().describe("Défaut : aujourd'hui"),
         au: DATE.optional().describe("Défaut : 14 jours après le début"),
         formateur: z.string().optional().describe("Prénom et nom, ou id"),
         salle: z.string().optional().describe("Intitulé ou id"),
         entreprise: z.string().optional().describe("Raison sociale, ENT_… ou id (sessions de cette entreprise)"),
+        limite: LIMITE,
       },
       annotations: { readOnlyHint: true },
     },
@@ -381,7 +382,8 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
           };
         })
         .sort((x, y) => `${x.date} ${x.horaire}`.localeCompare(`${y.date} ${y.horaire}`));
-      return json({ periode: `${du} → ${au}`, ...filtres, nb_creneaux: lignes.length, creneaux: lignes });
+      const { items: creneauxAff, avertissement } = borner(lignes, args.limite);
+      return json({ periode: `${du} → ${au}`, ...filtres, nb_creneaux: lignes.length, ...(avertissement ? { avertissement } : {}), creneaux: creneauxAff });
     },
   );
 
