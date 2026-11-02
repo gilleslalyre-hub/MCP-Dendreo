@@ -12,15 +12,16 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
     "enregistrer_module",
     {
       description:
-        "Crée ou modifie un module du catalogue (contenu pédagogique, durée, prix, catégorie, formateurs aptes, planning type) " +
-        "ou le supprime (refusé s'il est programmé dans des sessions). Planning type : `jours` seul, ou `jours` + `duree_par_jour`, " +
-        "ou `jours` + `creneaux` (ex. 08:30-11:00;14:30-16:50).",
+        "Crée (`intitule` obligatoire) ou modifie le module `module` (intitulé, MOD_… ou id) du catalogue, ou le supprime " +
+        "(refusé s'il est programmé dans des sessions). Planning type : `jours` seul, ou + `duree_par_jour` (heures), ou + " +
+        "`creneaux` d'une journée (ex. 08:30-11:00;14:30-16:50). `formateurs_aptes` : prénom nom ou id ; `catalogue` : " +
+        "visible sur le catalogue public.",
       inputSchema: {
-        module: z.string().optional().describe("Module existant à modifier ou supprimer (intitulé, MOD_… ou id) ; vide = création"),
+        module: z.string().optional(),
         supprimer: z.boolean().default(false),
-        intitule: z.string().optional().describe("Obligatoire pour une création"),
+        intitule: z.string().optional(),
         intitule_court: z.string().optional(),
-        description: z.string().optional().describe("Description / contenu"),
+        description: z.string().optional(),
         objectif: z.string().optional(),
         public_vise: z.string().optional(),
         pre_requis: z.string().optional(),
@@ -31,15 +32,15 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
         prix_inter: z.number().optional(),
         prix_intra: z.number().optional(),
         duree_heures: z.number().optional(),
-        jours: z.number().int().optional().describe("Planning type : nombre de jours"),
-        duree_par_jour: z.number().optional().describe("Planning type : heures par jour"),
-        creneaux: z.string().optional().describe("Planning type : créneaux d'une journée, ex. 09:00-12:00;14:00-17:00"),
+        jours: z.number().int().optional(),
+        duree_par_jour: z.number().optional(),
+        creneaux: z.string().optional(),
         places_min: z.number().int().optional(),
         places_max: z.number().int().optional(),
-        categorie: z.string().optional().describe("Intitulé ou id de catégorie de module"),
-        formateurs_aptes: z.array(z.string()).optional().describe("Formateurs aptes à réaliser le module (prénom nom ou id)"),
+        categorie: z.string().optional().describe("Intitulé ou id"),
+        formateurs_aptes: z.array(z.string()).optional(),
         mode_organisation: z.enum(["presentiel", "elearning_sync", "mixte", "elearning_async", "stage"]).optional(),
-        catalogue: z.boolean().optional().describe("Afficher sur le catalogue public"),
+        catalogue: z.boolean().optional(),
         eligible_cpf: z.boolean().optional(),
         eligible_dpc: z.boolean().optional(),
         include_in_bpf: z.boolean().optional(),
@@ -165,10 +166,11 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
     "enregistrer_formateur",
     {
       description:
-        "Crée ou modifie une fiche formateur (statut, statut BPF, rémunération, n° de déclaration d'activité, coordonnées) avec " +
-        "détection des doublons (nom + prénom, email), ou la supprime.",
+        "Crée ou modifie le formateur `formateur` (prénom nom ou id ; vide = création) : statut, statut BPF, rémunération, " +
+        "n° de déclaration d'activité (`num_da`), coordonnées, entreprise fournisseur de rattachement ; détecte les doublons " +
+        "(nom + prénom, email). Ou le supprime.",
       inputSchema: {
-        formateur: z.string().optional().describe("Formateur existant à modifier ou supprimer (prénom nom ou id) ; vide = création"),
+        formateur: z.string().optional(),
         supprimer: z.boolean().default(false),
         nom: z.string().optional(),
         prenom: z.string().optional(),
@@ -185,10 +187,10 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
         mode_remu: z.enum(["horaire", "journalier"]).optional(),
         remu_horaire_par_defaut: z.number().optional(),
         remu_journaliere_par_defaut: z.number().optional(),
-        num_da: z.string().optional().describe("Numéro de déclaration d'activité"),
+        num_da: z.string().optional(),
         profession: z.string().optional(),
         biographie_catalogue: z.string().optional(),
-        entreprise: z.string().optional().describe("Entreprise (fournisseur) de rattachement"),
+        entreprise: z.string().optional(),
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: true },
@@ -240,14 +242,15 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
     "creer_salle",
     {
       description:
-        "Crée une salle : interne (centre de formation), externe, virtuelle (e-learning) ou chez le client. L'API refuse la " +
-        "modification et la suppression d'une salle : elles se font dans Dendreo. `lister_centres=true` liste les centres de formation.",
+        "Crée une salle `type` : interne (centre de formation `centre`, id), externe (hors centre), virtuelle (e-learning, " +
+        "`url_connexion`) ou chez le client (`entreprise`). Modification et suppression : dans Dendreo (refusées par l'API). " +
+        "`lister_centres=true` liste les centres de formation.",
       inputSchema: {
         lister_centres: z.boolean().default(false),
-        intitule: z.string().optional().describe("Nom de la salle"),
-        type: z.enum(["interne", "externe", "virtuelle", "chez_le_client", "chez_le_client_hors_site"]).optional().describe("Emplacement : interne = centre de formation ; externe = hors centre ; virtuelle = e-learning ; chez_le_client = dans les locaux du client"),
-        centre: z.string().optional().describe("Id du centre de formation (pour une salle interne)"),
-        entreprise: z.string().optional().describe("Entreprise cliente (pour chez_le_client)"),
+        intitule: z.string().optional(),
+        type: z.enum(["interne", "externe", "virtuelle", "chez_le_client", "chez_le_client_hors_site"]).optional(),
+        centre: z.string().optional(),
+        entreprise: z.string().optional(),
         capacite_max: z.number().int().optional(),
         adresse: z.string().optional(),
         code_postal: z.string().optional(),
@@ -255,7 +258,7 @@ export function registerCatalogueTools(server: McpServer, client: DendreoClient)
         telephone: z.string().optional(),
         email: z.string().optional(),
         acces: z.string().optional(),
-        url_connexion: z.string().optional().describe("Lien de connexion (salle virtuelle)"),
+        url_connexion: z.string().optional(),
         acces_handicapes: z.boolean().optional(),
         acces_handicapes_desc: z.string().optional(),
         dry_run: z.boolean().default(true),

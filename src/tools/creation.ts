@@ -26,31 +26,29 @@ function slotOf(c: Row): Slot {
 }
 
 export const CREER_SESSION = {
-  formation: z.string().describe("Intitulé du module de formation, ex. « Product Builder »"),
-  formateur: z.string().describe("Prénom et nom du formateur, ex. « Clément Brottier »"),
-  dates: z.array(DATE).min(1).describe("Jours de formation (AAAA-MM-JJ), pas forcément consécutifs"),
-  horaires: z
-    .string()
-    .regex(HORAIRES)
-    .default("09:00-12:30;13:30-17:00")
-    .describe("Plages horaires de chaque jour, ex. 09:00-12:30;13:30-17:00"),
-  type: z.enum(["inter", "intra"]).default("inter").describe("inter (multi-entreprises) ou intra (une entreprise)"),
-  entreprise: z.string().optional().describe("Obligatoire si type=intra : raison sociale, numéro ENT_… ou id"),
-  id_entreprise: z.number().int().optional().describe("Alternative à entreprise"),
-  etape: z.string().optional().describe("Étape de l'ADF (ex. « Prévisionnelle »). Par défaut celle configurée dans Dendreo"),
-  salle: z.string().optional().describe("Salle de formation (intitulé ou id). Par défaut celle du module"),
-  prix: z.number().optional().describe("Prix personnalisé. Par défaut celui du module"),
+  formation: z.string().describe("Module : intitulé, MOD_… ou id"),
+  formateur: z.string().describe("Prénom et nom, ou id"),
+  dates: z.array(DATE).min(1).describe("Jours, pas forcément consécutifs"),
+  horaires: z.string().regex(HORAIRES, "format attendu HH:MM-HH:MM;HH:MM-HH:MM").default("09:00-12:30;13:30-17:00"),
+  type: z.enum(["inter", "intra"]).default("inter"),
+  entreprise: z.string().optional().describe("Obligatoire si intra"),
+  etape: z.string().optional().describe("Défaut : celle de Dendreo"),
+  salle: z.string().optional().describe("Défaut : celle du module"),
+  prix: z.number().optional().describe("Défaut : celui du module"),
   places_min: z.number().int().optional(),
   places_max: z.number().int().optional(),
-  id_responsable: z.number().int().optional().describe("Administrateur Dendreo responsable de la session"),
-  intitule: z.string().optional().describe("Intitulé de la session, par défaut celui du module"),
-  id_module: z.number().int().optional().describe("À fournir si plusieurs modules correspondent"),
-  id_formateur: z.number().int().optional().describe("À fournir si plusieurs formateurs correspondent"),
+  id_responsable: z.number().int().optional().describe("Administrateur responsable"),
+  intitule: z.string().optional().describe("Défaut : celui du module"),
   champs_personnalises: CHAMPS_PERSONNALISES,
-  dry_run: z.boolean().default(true).describe("true = simulation sans écriture"),
+  dry_run: z.boolean().default(true),
 };
 
-export type CreerSessionArgs = z.infer<z.ZodObject<typeof CREER_SESSION>>;
+/** Arguments de `creerSession` : ceux de l'outil, plus des ids déjà résolus (utilisés par `dupliquer_session`). */
+export type CreerSessionArgs = z.infer<z.ZodObject<typeof CREER_SESSION>> & {
+  id_entreprise?: number;
+  id_module?: number;
+  id_formateur?: number;
+};
 
 /** Crée une session complète (ADF, créneaux, staffing) ; en dry_run renvoie seulement le plan. */
 export async function creerSession(client: DendreoClient, args: CreerSessionArgs): Promise<CallToolResult> {
@@ -93,7 +91,7 @@ export async function creerSession(client: DendreoClient, args: CreerSessionArgs
 
   if (modules.length !== 1 || formateurs.length !== 1) {
     return json({
-      erreur: "Formation ou formateur introuvable ou ambigu : préciser id_module / id_formateur.",
+      erreur: "Formation ou formateur introuvable ou ambigu : passer l'id dans formation / formateur.",
       modules_trouves: modules,
       formateurs_trouves: formateurs,
     });

@@ -59,19 +59,19 @@ export function registerSessionTools(server: McpServer, client: DendreoClient) {
     "rechercher_sessions",
     {
       description:
-        "Recherche des actions de formation par formation (module), formateur, entreprise cliente, type, étape, " +
-        "texte libre (intitulé ou numéro) et période de début. Sans période, cherche les sessions à partir d'aujourd'hui (= sessions à venir). " +
-        "`mois` = sessions commençant dans ce mois. Indique les inscrits et `sous_minimum` si sous le minimum de participants.",
+        "Recherche des sessions par module (`formation`), formateur, entreprise cliente, type, étape, texte libre " +
+        "(intitulé ou numéro) et période de début (défaut : à partir d'aujourd'hui = à venir ; `mois` remplace " +
+        "debut_apres / debut_avant). Indique les inscrits et `sous_minimum`.",
       inputSchema: {
-        recherche: z.string().optional().describe("Texte libre sur l'intitulé ou le numéro (ex. ADF_2026)"),
-        formation: z.string().optional().describe("Module du catalogue : intitulé, numéro MOD_… ou id"),
-        formateur: z.string().optional().describe("Formateur : prénom et nom, ou id"),
-        entreprise: z.string().optional().describe("Entreprise cliente : raison sociale, numéro ENT_… ou id"),
+        recherche: z.string().optional(),
+        formation: z.string().optional(),
+        formateur: z.string().optional(),
+        entreprise: z.string().optional(),
         type: z.enum(["inter", "intra", "hors_formation"]).optional(),
-        etape: z.string().optional().describe("Étape de l'ADF, ex. « Réalisation », « Prévisionnelle »"),
-        debut_apres: DATE.optional().describe("Début à partir de (AAAA-MM-JJ), par défaut aujourd'hui"),
-        debut_avant: DATE.optional().describe("Début au plus tard le (AAAA-MM-JJ)"),
-        mois: z.string().regex(/^\d{4}-\d{2}$/, "format attendu AAAA-MM").optional().describe("Mois de début AAAA-MM (remplace debut_apres/debut_avant)"),
+        etape: z.string().optional(),
+        debut_apres: DATE.optional(),
+        debut_avant: DATE.optional(),
+        mois: z.string().regex(/^\d{4}-\d{2}$/, "format attendu AAAA-MM").optional(),
         limite: LIMITE,
       },
       annotations: { readOnlyHint: true },

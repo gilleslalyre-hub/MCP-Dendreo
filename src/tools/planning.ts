@@ -5,7 +5,15 @@ import { retirerFormateur } from "./gestion.js";
 import { findEntreprise, findFormateur, findSalle, findSession, single } from "./resolve.js";
 import { DATE, LIMITE, addDays, borner, heuresCreneau, json, nomDe, splitDateTime, today } from "./util.js";
 
-const HEURE = z.string().regex(/^\d{2}:\d{2}$/);
+const HEURE = z.string().regex(/^\d{2}:\d{2}$/, "format attendu HH:MM");
+
+/** Champs facultatifs communs à l'ajout et à la modification d'un créneau. */
+const CHAMPS_CRENEAU = {
+  intitule: z.string().optional(),
+  salle: z.string().optional(),
+  url_participants: z.string().optional(),
+  url_formateurs: z.string().optional(),
+};
 
 const slotLabel = (c: Row) => {
   const d = splitDateTime(c.date_debut);
@@ -124,36 +132,19 @@ export function registerPlanningTools(server: McpServer, client: DendreoClient) 
     "gerer_creneaux",
     {
       description:
-        "Modifie le planning d'une action de formation : ajouter des créneaux, modifier la date, les heures ou l'intitulé " +
-        "de créneaux existants, décaler des créneaux d'un nombre de jours, ou définir la salle / le lien visio d'un créneau " +
-        "(alerte si la capacité de la salle est inférieure aux inscrits). Un créneau émargé ne peut pas être modifié.",
+        "Modifie le planning d'une session : `ajouter` des créneaux ; `modifier` date, heures, intitulé, salle ou liens visio " +
+        "(id_creneau visible avec detail_session ; `url_participants` exige une salle) ; décaler de `decaler_jours` jours " +
+        "(négatif = avancer) les créneaux `decaler_ids` (défaut : tous). `id_lam` : module des nouveaux créneaux si la session " +
+        "en a plusieurs. Alerte si la salle est trop petite pour les inscrits. Un créneau émargé ne peut pas être modifié.",
       inputSchema: {
         session: z.string(),
-        ajouter: z
-          .array(z.object({ date: DATE, heure_debut: HEURE, heure_fin: HEURE, intitule: z.string().optional(),
-          salle: z.string().optional().describe("Salle (intitulé ou id) du créneau"),
-          url_participants: z.string().optional().describe("Lien visio participants (salle virtuelle ; exige une salle)"),
-          url_formateurs: z.string().optional().describe("Lien visio formateurs"),
-          }))
-          .optional(),
+        ajouter: z.array(z.object({ date: DATE, heure_debut: HEURE, heure_fin: HEURE, ...CHAMPS_CRENEAU })).optional(),
         modifier: z
-          .array(
-            z.object({
-              id_creneau: z.string(),
-              date: DATE.optional(),
-              heure_debut: HEURE.optional(),
-              heure_fin: HEURE.optional(),
-              intitule: z.string().optional(),
-              salle: z.string().optional().describe("Salle (intitulé ou id) du créneau"),
-              url_participants: z.string().optional().describe("Lien visio participants (salle virtuelle ; exige une salle)"),
-              url_formateurs: z.string().optional().describe("Lien visio formateurs"),
-            }),
-          )
-          .optional()
-          .describe("Créneaux à modifier (id visible avec detail_session)"),
-        decaler_jours: z.number().int().optional().describe("Décale de N jours (négatif = avancer)"),
-        decaler_ids: z.array(z.string()).optional().describe("Créneaux à décaler. Par défaut tous ceux de la session"),
-        id_lam: z.string().optional().describe("Module (programmation) des nouveaux créneaux si la session en a plusieurs"),
+          .array(z.object({ id_creneau: z.string(), date: DATE.optional(), heure_debut: HEURE.optional(), heure_fin: HEURE.optional(), ...CHAMPS_CRENEAU }))
+          .optional(),
+        decaler_jours: z.number().int().optional(),
+        decaler_ids: z.array(z.string()).optional(),
+        id_lam: z.string().optional(),
         dry_run: z.boolean().default(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: false },
