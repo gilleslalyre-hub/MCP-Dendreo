@@ -241,6 +241,17 @@ Variables d'environnement (voir `.env.example`) :
 | `DENDREO_SLUG` | identifiant de l'instance (`https://pro.dendreo.com/<slug>/api/`) |
 | `DENDREO_API_KEY` | clé API Dendreo |
 | `MCP_AUTH_TOKEN` | jeton secret exigé dans l'URL du connecteur (`?token=`) ou en `Authorization: Bearer` |
+| `MCP_MESURE` | optionnel : `0` désactive la mesure des réponses (voir ci-dessous) |
+
+## Mesure de la consommation
+
+Chaque appel d'outil écrit une ligne dans les journaux, sans les arguments ni le contenu :
+
+```json
+{"mcp_outil":"factures","cars":5210,"tokens_estimes":1489,"ms":840}
+```
+
+Sur Vercel : projet > **Logs**, rechercher `mcp_outil`. Les outils qui reviennent souvent avec beaucoup de `tokens_estimes` sont ceux à alléger en priorité.
 
 ## Test en local
 

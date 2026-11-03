@@ -1,7 +1,7 @@
 // Motif commun des écritures : simulation par défaut (dry_run=true), exécution sur confirmation.
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { DendreoError } from "../dendreo/client.js";
-import { json } from "./util.js";
+import { json, resumeReponse } from "./util.js";
 
 export const messageErreur = (e: unknown): string =>
   e instanceof DendreoError && e.status === 422 ? `refusé par Dendreo : ${e.message}` : `erreur : ${(e as Error).message}`;
@@ -14,7 +14,7 @@ export async function appliquer(
 ): Promise<CallToolResult> {
   if (dryRun) return json({ dry_run: true, ...recap });
   try {
-    return json({ ok: true, ...recap, resultat: await executer() });
+    return json({ ok: true, ...recap, resultat: resumeReponse(await executer()) });
   } catch (e) {
     return json({ ok: false, ...recap, erreur: messageErreur(e) });
   }

@@ -7,9 +7,29 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
  */
 export function serialiser(data: unknown): string {
   return JSON.stringify(data, function (_k, v) {
+    if (typeof v === "string") v = dateCourte(v);
     if (Array.isArray(this)) return v;
     return v === null || v === "" || (typeof v === "string" && v.startsWith("0000-00-00")) ? undefined : v;
   });
+}
+
+/** « AAAA-MM-JJ 00:00:00 » → « AAAA-MM-JJ » ; « AAAA-MM-JJ HH:MM:00 » → « AAAA-MM-JJ HH:MM ». */
+function dateCourte(v: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}):(\d{2})$/.exec(v);
+  if (!m || m[3] !== "00") return v;
+  return m[2] === "00:00" ? m[1] : `${m[1]} ${m[2]}`;
+}
+
+/** Clés utiles d'une réponse d'écriture Dendreo (souvent la fiche complète) : ids, numéro, statut, liens, erreurs. */
+const CLE_UTILE = /^(id(_.*)?|numero_complet|status|success|message|errors?|public_url|url)$/;
+
+/** Réduit la réponse d'une écriture à ce qui sert à la suite de la conversation. */
+export function resumeReponse(r: unknown): unknown {
+  if (Array.isArray(r)) return r.length > 20 ? { nombre: r.length, extrait: r.slice(0, 20).map(resumeReponse) } : r.map(resumeReponse);
+  if (!r || typeof r !== "object") return r;
+  const garde = Object.entries(r).filter(([k, v]) => CLE_UTILE.test(k) && (v === null || typeof v !== "object"));
+  if (garde.length) return Object.fromEntries(garde);
+  return JSON.stringify(r).length <= 300 ? r : { champs_renvoyes: Object.keys(r).length };
 }
 
 export function json(data: unknown): CallToolResult {

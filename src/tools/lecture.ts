@@ -22,6 +22,9 @@ function creneau(c: Row) {
   };
 }
 
+/** Formations détaillées par participant (les plus récentes d'abord). */
+const MAX_FORMATIONS = 10;
+
 export function registerLectureTools(server: McpServer, client: DendreoClient) {
   server.registerTool(
     "detail_session",
@@ -90,7 +93,7 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
     {
       description:
         "Recherche des participants par email, nom ou date de naissance, et affiche leurs formations " +
-        "(sessions auxquelles ils sont inscrits).",
+        "(sessions auxquelles ils sont inscrits, les 10 plus récentes).",
       inputSchema: {
         recherche: z.string().describe("Email, nom, ou date de naissance"),
       },
@@ -108,9 +111,7 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
             id_participant: String(p.id_participant),
             include: "action_de_formation",
           });
-          return {
-            ...p,
-            formations: laps
+          const formations = laps
               .map((l) => {
                 const a = (l.action_de_formation ?? {}) as Row;
                 return {
@@ -121,7 +122,11 @@ export function registerLectureTools(server: McpServer, client: DendreoClient) {
                   date_fin: a.date_fin,
                 };
               })
-              .sort((a, b) => String(b.date_debut).localeCompare(String(a.date_debut))),
+              .sort((a, b) => String(b.date_debut).localeCompare(String(a.date_debut)));
+          return {
+            ...p,
+            ...(formations.length > MAX_FORMATIONS ? { nb_formations: formations.length } : {}),
+            formations: formations.slice(0, MAX_FORMATIONS),
           };
         }),
       );

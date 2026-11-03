@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DendreoClient } from "./dendreo/client.js";
+import { mesurerAppels } from "./mesure.js";
 import { allegerListeOutils } from "./slim.js";
 import { registerCatalogueTools } from "./tools/catalogue.js";
 import { registerCreationTools } from "./tools/creation.js";
@@ -45,5 +46,6 @@ export function createServer(): McpServer {
   registerCatalogueTools(server, client);
   registerGenericTools(server, client);
   allegerListeOutils(server);
+  mesurerAppels(server);
   return server;
 }
