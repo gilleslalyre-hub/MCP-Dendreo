@@ -12,7 +12,7 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { DATE, CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { DATE, CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, splitDateTime, today, vrai, resumeReponse } from "./util.js";
 
 const SESSION = z.string();
 
@@ -663,7 +663,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
       if (args.id_lae && args.id_contact) {
         const body = { id_lae: args.id_lae, id_contact: args.id_contact };
         if (args.dry_run) return json({ dry_run: true, session: sessionLabel(s.row), changement: body });
-        return json({ ok: true, resultat: await client.post("laes.php", body) });
+        return json({ ok: true, resultat: resumeReponse(await client.post("laes.php", body)) });
       }
       const laes = await client.list("laes.php", { id_action_de_formation: String(s.row.id_action_de_formation) });
       const contactIds = [...new Set(laes.map((l) => String(l.id_contact)).filter((id) => id && id !== "0"))];
@@ -714,7 +714,7 @@ export function registerGestionTools(server: McpServer, client: DendreoClient) {
       };
       if (args.id && Object.keys(changements).length) {
         if (args.dry_run) return json({ dry_run: true, id: args.id, changements });
-        return json({ ok: true, resultat: await client.post("sessions_permanentes.php", { id: args.id, ...changements }) });
+        return json({ ok: true, resultat: resumeReponse(await client.post("sessions_permanentes.php", { id: args.id, ...changements })) });
       }
       let idModule: string | undefined;
       if (args.formation) {

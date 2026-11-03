@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { DendreoClient, Query, Row } from "../dendreo/client.js";
 import { findEntreprise, findFormateur, findInscription, findModule, findSession, inscriptionsSession, single } from "./resolve.js";
-import { DATE, json, nomDe, vrai } from "./util.js";
+import { DATE, json, nomDe, vrai, resumeReponse } from "./util.js";
 
 const SESSION = z.string();
 const sessionLabel = (adf: Row) => `${adf.numero_complet} — ${adf.intitule}`;
@@ -201,7 +201,7 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
         const contenu = Buffer.from(args.contenu_base64, "base64");
         const recap = { fichier: args.nom_fichier, taille_ko: Math.round(contenu.length / 1024), rattachement: "aucun (tri automatique par QR code)" };
         if (args.dry_run) return json({ dry_run: true, ...recap });
-        return json({ ok: true, ...recap, resultat: await client.postFile("fichiers.php", {}, { nom: args.nom_fichier, contenu }) });
+        return json({ ok: true, ...recap, resultat: resumeReponse(await client.postFile("fichiers.php", {}, { nom: args.nom_fichier, contenu })) });
       }
       if (!args.cible || !args.id_cible) return json({ erreur: "Préciser cible et id_cible." });
       let idCible = args.id_cible;
@@ -237,7 +237,7 @@ export function registerDocumentTools(server: McpServer, client: DendreoClient) 
       };
       const recap = { fichier: args.nom_fichier, taille_ko: Math.round(contenu.length / 1024), ...champs };
       if (args.dry_run) return json({ dry_run: true, ...recap });
-      return json({ ok: true, ...recap, resultat: await client.postFile("fichiers.php", champs, { nom: args.nom_fichier, contenu }) });
+      return json({ ok: true, ...recap, resultat: resumeReponse(await client.postFile("fichiers.php", champs, { nom: args.nom_fichier, contenu })) });
     },
   );
 

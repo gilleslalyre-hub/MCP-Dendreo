@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DendreoClient, Row } from "../dendreo/client.js";
 import { appliquer } from "./ecriture.js";
 import { findEntreprise, findSession, inscriptionsSession, single } from "./resolve.js";
-import { DATE, CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, normalize, num, today, vrai } from "./util.js";
+import { DATE, CHAMPS_PERSONNALISES, LIMITE, borner, json, nomDe, normalize, num, today, vrai, resumeReponse } from "./util.js";
 
 const ENTREPRISE = z.string().describe("Raison sociale, numéro ENT_… ou id");
 
@@ -350,7 +350,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
     const body = args.id_participant ? { id_participant: args.id_participant } : { id_entreprise: idEntreprise };
     const recap = { fiche, ...(bloquants.length ? { bloquants } : {}) };
     if (args.dry_run || bloquants.length) return json({ dry_run: args.dry_run, ...recap });
-    return json({ ok: true, ...recap, resultat: await client.post("convert_particulier.php", body) });
+    return json({ ok: true, ...recap, resultat: resumeReponse(await client.post("convert_particulier.php", body)) });
   };
 
   server.registerTool(
@@ -439,7 +439,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
         priorite: args.priorite,
       });
       if (args.dry_run) return json({ dry_run: true, action_commerciale: body });
-      return json({ ok: true, resultat: await client.post("actions_commerciales.php", body) });
+      return json({ ok: true, resultat: resumeReponse(await client.post("actions_commerciales.php", body)) });
     },
   );
 
@@ -523,7 +523,7 @@ export function registerCrmTools(server: McpServer, client: DendreoClient) {
         description: args.description,
       });
       if (args.dry_run) return json({ dry_run: true, entreprise: entreprise.raison_sociale, opportunite: body });
-      return json({ ok: true, resultat: await client.post("opportunites.php", body) });
+      return json({ ok: true, resultat: resumeReponse(await client.post("opportunites.php", body)) });
     },
   );
 }

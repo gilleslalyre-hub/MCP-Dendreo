@@ -9,7 +9,7 @@ import {
   inscriptionsSession,
   single,
 } from "./resolve.js";
-import { DATE, LIMITE, borner, json, nomDe, splitDateTime, today, vrai } from "./util.js";
+import { DATE, LIMITE, borner, json, nomDe, splitDateTime, today, vrai, resumeReponse } from "./util.js";
 
 const SESSION = z.string();
 
@@ -452,7 +452,7 @@ export function registerSuiviTools(server: McpServer, client: DendreoClient) {
       };
       if (args.dry_run) return json({ dry_run: true, ...recap });
       const resultat = await client.post("evaluations.php", body);
-      return json({ ok: true, ...recap, resultat });
+      return json({ ok: true, ...recap, resultat: resumeReponse(resultat) });
     },
   );
 
