@@ -43,7 +43,7 @@ Lecture :
 
 | Outil | Rôle |
 |---|---|
-| `rechercher_participant` | Participants par email, nom ou date de naissance, avec leurs formations |
+| `rechercher_participant` | Participants par email, nom ou date de naissance, avec leurs formations (les 10 plus récentes) |
 | `inscription_modules` | Modules suivis par chaque participant d'une session multi-modules |
 | `souhaits_formation` | Souhaits de formation par module ou participant (qui attend une session ?) |
 
@@ -230,7 +230,24 @@ Lecture :
 
 | Outil | Rôle |
 |---|---|
-| `dendreo_get` | Lecture brute de n'importe quelle ressource de l'API |
+| `dendreo_get` | Lecture brute de n'importe quelle ressource de l'API (réponse tronquée au-delà de 12 000 caractères : passer `fields` et des filtres) |
+
+## Économie de tokens
+
+Les définitions des outils sont chargées dans chaque conversation et chaque réponse d'outil s'ajoute au contexte : le serveur limite les deux.
+
+**Liste des outils** (`src/slim.ts`, appliqué à la réponse `tools/list`) :
+
+- les consignes communes (simulation `dry_run`, format des ids et des dates) figurent une seule fois dans les instructions du serveur (`src/server.ts`), pas dans chaque outil ;
+- les éléments techniques inutiles au modèle sont retirés du schéma annoncé : `$schema`, `additionalProperties: false`, `execution` par défaut, motifs des dates, `"type": "string"` à côté d'un `enum` ; les `$ref` sont remplacés par leur cible quand elle est plus courte ;
+- la validation côté serveur reste complète (zod) : une valeur mal formée renvoie un message explicite, par exemple « format attendu AAAA-MM-JJ ».
+
+**Réponses** (`src/tools/util.ts`) :
+
+- JSON compact, sans les clés vides (`null`, `""`, dates `0000-00-00`) ;
+- dates-heures raccourcies : `2026-10-01 09:30:00` → `2026-10-01 09:30`, `2026-10-01 00:00:00` → `2026-10-01` ;
+- après une écriture, la réponse de Dendreo est réduite aux ids, numéro, statut, liens et erreurs ;
+- les listes sont plafonnées (paramètre `limite`, 50 lignes par défaut) avec le total et un avertissement quand elles sont coupées.
 
 ## Configuration
 
